@@ -229,8 +229,16 @@ export function ProfilePage() {
       toast.error("Pehle apna role select karein");
       return;
     }
-    if (selectedRole === "admin" && !adminCode.trim()) {
-      toast.error("Admin code daalen");
+    if (!adminCode.trim()) {
+      toast.error("Password daalen");
+      return;
+    }
+    if (selectedRole === "admin" && adminCode.trim() !== "Wesrock") {
+      toast.error("Admin password galat hai");
+      return;
+    }
+    if (selectedRole === "user" && adminCode.trim() !== "982717") {
+      toast.error("User password galat hai");
       return;
     }
 
@@ -240,7 +248,7 @@ export function ProfilePage() {
         email: googleEmail,
         displayName,
         wantsAdmin: selectedRole === "admin",
-        adminCode: selectedRole === "admin" ? adminCode.trim() : "",
+        adminCode: selectedRole === "admin" ? "Wesrock" : "",
       });
       await Promise.all([refetchProfile(), refetchBalance()]);
       setShowRoleDialog(false);
@@ -956,9 +964,9 @@ export function ProfilePage() {
               />
             </div>
 
-            {/* Admin Code Field — only when Admin selected */}
+            {/* Password Field — shown for both roles */}
             <AnimatePresence>
-              {selectedRole === "admin" && (
+              {selectedRole && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
@@ -967,23 +975,38 @@ export function ProfilePage() {
                   className="overflow-hidden"
                 >
                   <div className="space-y-1.5 pt-1">
-                    <Label className="text-sm font-body flex items-center gap-1.5 text-emerald-400">
-                      <Shield className="w-3.5 h-3.5" /> Admin Code
+                    <Label
+                      className="text-sm font-body flex items-center gap-1.5"
+                      style={{
+                        color:
+                          selectedRole === "admin"
+                            ? "oklch(0.72 0.18 160)"
+                            : "oklch(0.72 0.25 42)",
+                      }}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      {selectedRole === "admin"
+                        ? "Admin Password"
+                        : "User Password"}
                     </Label>
                     <Input
                       type="password"
                       className="bg-secondary/60 h-12"
                       style={{
-                        borderColor: "oklch(0.4 0.1 160 / 0.5)",
+                        borderColor:
+                          selectedRole === "admin"
+                            ? "oklch(0.4 0.1 160 / 0.5)"
+                            : "oklch(0.5 0.15 42 / 0.5)",
                       }}
-                      placeholder="Secret admin code daalen"
+                      placeholder={
+                        selectedRole === "admin"
+                          ? "Admin password daalen"
+                          : "User password daalen"
+                      }
                       value={adminCode}
                       onChange={(e) => setAdminCode(e.target.value)}
                       autoComplete="off"
                     />
-                    <p className="text-xs text-muted-foreground font-body">
-                      Hint: MATKA2024
-                    </p>
                   </div>
                 </motion.div>
               )}
