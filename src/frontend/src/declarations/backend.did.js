@@ -28,13 +28,6 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
-export const Transaction = IDL.Record({
-  'userId' : IDL.Principal,
-  'description' : IDL.Text,
-  'timestamp' : IDL.Int,
-  'txType' : IDL.Text,
-  'amount' : IDL.Int,
-});
 export const BetStatus = IDL.Variant({
   'won' : IDL.Null,
   'pending' : IDL.Null,
@@ -44,16 +37,19 @@ export const Bet = IDL.Record({
   'id' : IDL.Nat,
   'status' : BetStatus,
   'userId' : IDL.Principal,
+  'createdAt' : IDL.Int,
   'betType' : IDL.Text,
   'gameId' : IDL.Text,
+  'updatedAt' : IDL.Int,
   'amount' : IDL.Nat,
   'betNumber' : IDL.Text,
 });
-export const UserProfile = IDL.Record({
-  'password' : IDL.Text,
-  'name' : IDL.Text,
-  'phone' : IDL.Text,
-  'walletBalance' : IDL.Nat,
+export const Transaction = IDL.Record({
+  'userId' : IDL.Principal,
+  'description' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'txType' : IDL.Text,
+  'amount' : IDL.Int,
 });
 export const WithdrawalStatus = IDL.Variant({
   'pending' : IDL.Null,
@@ -72,37 +68,56 @@ export const Withdrawal = IDL.Record({
   'details' : IDL.Text,
   'amount' : IDL.Nat,
 });
+export const UserProfile = IDL.Record({
+  'name' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'updatedAt' : IDL.Int,
+  'phone' : IDL.Text,
+  'walletBalance' : IDL.Nat,
+});
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addGame' : IDL.Func([Game], [], []),
   'addGameResult' : IDL.Func([GameResult], [], []),
-  'addMoney' : IDL.Func([IDL.Nat], [], []),
+  'addMoney' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'approveWithdrawal' : IDL.Func([IDL.Nat], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-  'getAllTransactions' : IDL.Func([], [IDL.Vec(Transaction)], ['query']),
-  'getAllUsers' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
-  'getBet' : IDL.Func([IDL.Nat], [IDL.Opt(Bet)], ['query']),
-  'getBets' : IDL.Func([], [IDL.Vec(Bet)], ['query']),
+  'deleteGame' : IDL.Func([IDL.Text], [], []),
+  'getAllBets' : IDL.Func([], [IDL.Vec(Bet)], ['query']),
+  'getAllTransactions' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(Transaction)))],
+      ['query'],
+    ),
+  'getAllWithdrawals' : IDL.Func([], [IDL.Vec(Withdrawal)], ['query']),
+  'getBets' : IDL.Func([IDL.Text], [IDL.Vec(Bet)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getGame' : IDL.Func([IDL.Text], [IDL.Opt(Game)], ['query']),
   'getGameResult' : IDL.Func([IDL.Text], [IDL.Opt(GameResult)], ['query']),
   'getGames' : IDL.Func([], [IDL.Vec(Game)], ['query']),
+  'getTransactions' : IDL.Func([IDL.Text], [IDL.Vec(Transaction)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
       ['query'],
     ),
-  'getUserTransactions' : IDL.Func([], [IDL.Vec(Transaction)], ['query']),
-  'getWalletBalance' : IDL.Func([], [IDL.Nat], ['query']),
-  'getWithdrawals' : IDL.Func([], [IDL.Vec(Withdrawal)], ['query']),
+  'getWalletBalance' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
+  'getWithdrawals' : IDL.Func([IDL.Text], [IDL.Vec(Withdrawal)], ['query']),
+  'isAdminCheck' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-  'placeBet' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Nat], [], []),
-  'register' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'login' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
+  'placeBet' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+      [],
+      [],
+    ),
+  'register' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Text], []),
   'rejectWithdrawal' : IDL.Func([IDL.Nat], [], []),
   'requestWithdrawal' : IDL.Func(
       [
+        IDL.Text,
         IDL.Nat,
         IDL.Variant({
           'upi' : IDL.Text,
@@ -114,8 +129,8 @@ export const idlService = IDL.Service({
       [],
     ),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-  'settleBets' : IDL.Func([IDL.Text], [], []),
-  'updateGameResult' : IDL.Func([IDL.Text, GameResult], [], []),
+  'settleBet' : IDL.Func([IDL.Nat, IDL.Bool], [], []),
+  'updateGame' : IDL.Func([Game], [], []),
 });
 
 export const idlInitArgs = [];
@@ -141,13 +156,6 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
-  const Transaction = IDL.Record({
-    'userId' : IDL.Principal,
-    'description' : IDL.Text,
-    'timestamp' : IDL.Int,
-    'txType' : IDL.Text,
-    'amount' : IDL.Int,
-  });
   const BetStatus = IDL.Variant({
     'won' : IDL.Null,
     'pending' : IDL.Null,
@@ -157,16 +165,19 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Nat,
     'status' : BetStatus,
     'userId' : IDL.Principal,
+    'createdAt' : IDL.Int,
     'betType' : IDL.Text,
     'gameId' : IDL.Text,
+    'updatedAt' : IDL.Int,
     'amount' : IDL.Nat,
     'betNumber' : IDL.Text,
   });
-  const UserProfile = IDL.Record({
-    'password' : IDL.Text,
-    'name' : IDL.Text,
-    'phone' : IDL.Text,
-    'walletBalance' : IDL.Nat,
+  const Transaction = IDL.Record({
+    'userId' : IDL.Principal,
+    'description' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'txType' : IDL.Text,
+    'amount' : IDL.Int,
   });
   const WithdrawalStatus = IDL.Variant({
     'pending' : IDL.Null,
@@ -185,37 +196,56 @@ export const idlFactory = ({ IDL }) => {
     'details' : IDL.Text,
     'amount' : IDL.Nat,
   });
+  const UserProfile = IDL.Record({
+    'name' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'updatedAt' : IDL.Int,
+    'phone' : IDL.Text,
+    'walletBalance' : IDL.Nat,
+  });
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addGame' : IDL.Func([Game], [], []),
     'addGameResult' : IDL.Func([GameResult], [], []),
-    'addMoney' : IDL.Func([IDL.Nat], [], []),
+    'addMoney' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'approveWithdrawal' : IDL.Func([IDL.Nat], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-    'getAllTransactions' : IDL.Func([], [IDL.Vec(Transaction)], ['query']),
-    'getAllUsers' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
-    'getBet' : IDL.Func([IDL.Nat], [IDL.Opt(Bet)], ['query']),
-    'getBets' : IDL.Func([], [IDL.Vec(Bet)], ['query']),
+    'deleteGame' : IDL.Func([IDL.Text], [], []),
+    'getAllBets' : IDL.Func([], [IDL.Vec(Bet)], ['query']),
+    'getAllTransactions' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(Transaction)))],
+        ['query'],
+      ),
+    'getAllWithdrawals' : IDL.Func([], [IDL.Vec(Withdrawal)], ['query']),
+    'getBets' : IDL.Func([IDL.Text], [IDL.Vec(Bet)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getGame' : IDL.Func([IDL.Text], [IDL.Opt(Game)], ['query']),
     'getGameResult' : IDL.Func([IDL.Text], [IDL.Opt(GameResult)], ['query']),
     'getGames' : IDL.Func([], [IDL.Vec(Game)], ['query']),
+    'getTransactions' : IDL.Func([IDL.Text], [IDL.Vec(Transaction)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
         ['query'],
       ),
-    'getUserTransactions' : IDL.Func([], [IDL.Vec(Transaction)], ['query']),
-    'getWalletBalance' : IDL.Func([], [IDL.Nat], ['query']),
-    'getWithdrawals' : IDL.Func([], [IDL.Vec(Withdrawal)], ['query']),
+    'getWalletBalance' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
+    'getWithdrawals' : IDL.Func([IDL.Text], [IDL.Vec(Withdrawal)], ['query']),
+    'isAdminCheck' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-    'placeBet' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Nat], [], []),
-    'register' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'login' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
+    'placeBet' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [],
+        [],
+      ),
+    'register' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Text], []),
     'rejectWithdrawal' : IDL.Func([IDL.Nat], [], []),
     'requestWithdrawal' : IDL.Func(
         [
+          IDL.Text,
           IDL.Nat,
           IDL.Variant({
             'upi' : IDL.Text,
@@ -227,8 +257,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-    'settleBets' : IDL.Func([IDL.Text], [], []),
-    'updateGameResult' : IDL.Func([IDL.Text, GameResult], [], []),
+    'settleBet' : IDL.Func([IDL.Nat, IDL.Bool], [], []),
+    'updateGame' : IDL.Func([Game], [], []),
   });
 };
 

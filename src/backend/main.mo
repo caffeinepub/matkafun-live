@@ -1,27 +1,47 @@
 import Map "mo:core/Map";
 import Array "mo:core/Array";
+import Time "mo:core/Time";
 import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Text "mo:core/Text";
 import Iter "mo:core/Iter";
-import Time "mo:core/Time";
 import Order "mo:core/Order";
-import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Principal "mo:core/Principal";
+
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Migration "migration"; // Explicit migration function
 
+(with migration = Migration.run)
 actor {
   // Initialize the user system state
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
   // TYPES
-  type UserProfile = {
+  public type UserProfile = {
     name : Text;
     phone : Text;
-    password : Text;
     walletBalance : Nat;
+    createdAt : Int;
+    updatedAt : Int;
+  };
+
+  type User = {
+    name : Text;
+    phone : Text;
+    passwordHash : Blob;
+    walletBalance : Nat;
+    createdAt : Int;
+    updatedAt : Int;
+  };
+
+  type SessionData = {
+    userId : Principal;
+    expiry : Int;
+    createdAt : Int;
+    lastUsed : Int;
   };
 
   type Game = {
@@ -49,6 +69,8 @@ actor {
     betNumber : Text;
     amount : Nat;
     status : BetStatus;
+    createdAt : Int;
+    updatedAt : Int;
   };
 
   type BetStatus = {
@@ -88,7 +110,8 @@ actor {
   };
 
   // STATE
-  let userProfiles = Map.empty<Principal, UserProfile>();
+  let users = Map.empty<Principal, User>();
+  let sessions = Map.empty<Text, SessionData>();
   let games = Map.empty<Text, Game>();
   let gameResults = Map.empty<Text, GameResult>();
   let bets = Map.empty<Nat, Bet>();
@@ -98,123 +121,229 @@ actor {
   var betIdCounter : Nat = 0;
   var withdrawalIdCounter : Nat = 0;
 
-  // HELPER FUNCTIONS
-  private func recordTransaction(userId : Principal, txType : Text, amount : Int, description : Text) {
-    let tx : Transaction = {
-      userId;
-      txType;
-      amount;
-      description;
-      timestamp = Time.now();
-    };
-
-    let userTxs = switch (transactions.get(userId)) {
-      case (null) { [] };
-      case (?txs) { txs };
-    };
-
-    let updatedTxs = [tx].concat(userTxs);
-    transactions.add(userId, updatedTxs);
+  // UTILS
+  func now() : Int {
+    Time.now();
   };
 
-  private func updateWalletBalance(userId : Principal, newBalance : Nat) {
-    switch (userProfiles.get(userId)) {
-      case (null) { Runtime.trap("User not found") };
-      case (?profile) {
-        let updatedProfile : UserProfile = {
-          name = profile.name;
-          phone = profile.phone;
-          password = profile.password;
-          walletBalance = newBalance;
-        };
-        userProfiles.add(userId, updatedProfile);
-      };
-    };
+  // WARNING: This is not safe and only used for local testing
+  func hashPassword(password : Text) : Blob {
+    password.encodeUtf8();
   };
 
-  // USER PROFILE METHODS
-  public shared ({ caller }) func register(name : Text, phone : Text, password : Text) : async () {
-    if (userProfiles.containsKey(caller)) {
-      Runtime.trap("User already registered");
+  // Verify that the caller owns the session token
+  func verifySessionOwnership(caller : Principal, token : Text) : SessionData {
+    let session = switch (sessions.get(token)) {
+      case (null) { Runtime.trap("Session not found") };
+      case (?s) { s };
     };
 
-    let profile : UserProfile = {
+    if (session.expiry < now()) {
+      Runtime.trap("Session expired");
+    };
+
+    if (session.userId != caller) {
+      Runtime.trap("Unauthorized: Session does not belong to caller");
+    };
+
+    session;
+  };
+
+  // AUTHENTICATION
+  public shared ({ caller }) func register(name : Text, phone : Text, password : Text) : async Text {
+    // Check if phone already exists
+    let existingUsers = users.toArray().filter(
+      func((id, user)) : Bool {
+        user.phone == phone;
+      }
+    );
+
+    if (existingUsers.size() > 0) {
+      Runtime.trap("Phone number already registered");
+    };
+
+    let isFirstUser = users.isEmpty();
+
+    let user : User = {
       name;
       phone;
-      password;
-      walletBalance = 100_000_000; // Rs.1000 = 1000 * 100000 (assuming 100000 = Re.1)
+      passwordHash = hashPassword(password);
+      walletBalance = 100_000_000;
+      createdAt = now();
+      updatedAt = now();
     };
 
-    userProfiles.add(caller, profile);
-    
-    // Assign user role
-    AccessControl.assignRole(accessControlState, caller, caller, #user);
-    
+    users.add(caller, user);
+
+    // First user becomes admin, others are regular users
+    if (isFirstUser) {
+      AccessControl.assignRole(accessControlState, caller, caller, #admin);
+    } else {
+      AccessControl.assignRole(accessControlState, caller, caller, #user);
+    };
+
     // Record signup bonus transaction
     recordTransaction(caller, "credit", 100_000_000, "Signup bonus");
+
+    let token = createSession(caller);
+    token;
   };
 
+  public shared ({ caller }) func login(phone : Text, password : Text) : async Text {
+    let userId = findUserByPhone(phone);
+    let user : User = switch (users.get(userId)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?u) { u };
+    };
+
+    if (user.passwordHash != hashPassword(password)) {
+      Runtime.trap("Invalid password");
+    };
+
+    let token = createSession(userId);
+    token;
+  };
+
+  func findUserByPhone(phone : Text) : Principal {
+    let matches = users.toArray().filter(
+      func((id, user)) : Bool {
+        user.phone == phone;
+      }
+    );
+    if (matches.size() == 0) {
+      Runtime.trap("User not found");
+    };
+    matches[0].0;
+  };
+
+  func createSession(userId : Principal) : Text {
+    let token = userId.toText() # Time.now().toText();
+    let sessionData : SessionData = {
+      userId;
+      expiry = now() + 86_400_000_000_000;
+      createdAt = now();
+      lastUsed = now();
+    };
+    sessions.add(token, sessionData);
+    token;
+  };
+
+  func getUserBySession(token : Text) : User {
+    let session = switch (sessions.get(token)) {
+      case (null) { Runtime.trap("Session not found") };
+      case (?s) { s };
+    };
+
+    if (session.expiry < now()) {
+      Runtime.trap("Session expired");
+    };
+
+    let user = switch (users.get(session.userId)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?u) { u };
+    };
+
+    user;
+  };
+
+  // USER PROFILE FUNCTIONS (Required by instructions)
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can get user profiles");
+      Runtime.trap("Unauthorized: Only users can view profiles");
     };
-    userProfiles.get(caller);
-  };
 
-  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save user profiles");
+    switch (users.get(caller)) {
+      case (null) { null };
+      case (?user) {
+        ?{
+          name = user.name;
+          phone = user.phone;
+          walletBalance = user.walletBalance;
+          createdAt = user.createdAt;
+          updatedAt = user.updatedAt;
+        };
+      };
     };
-    userProfiles.add(caller, profile);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
     if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Can only view your own profile");
     };
-    userProfiles.get(user);
+
+    switch (users.get(user)) {
+      case (null) { null };
+      case (?u) {
+        ?{
+          name = u.name;
+          phone = u.phone;
+          walletBalance = u.walletBalance;
+          createdAt = u.createdAt;
+          updatedAt = u.updatedAt;
+        };
+      };
+    };
   };
 
-  public query ({ caller }) func getWalletBalance() : async Nat {
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can get their wallet balance");
+      Runtime.trap("Unauthorized: Only users can save profiles");
     };
-    let profile = switch (userProfiles.get(caller)) {
+
+    let existingUser = switch (users.get(caller)) {
       case (null) { Runtime.trap("User not found") };
-      case (?p) { p };
+      case (?u) { u };
     };
-    profile.walletBalance;
+
+    let updatedUser : User = {
+      name = profile.name;
+      phone = existingUser.phone;
+      passwordHash = existingUser.passwordHash;
+      walletBalance = existingUser.walletBalance;
+      createdAt = existingUser.createdAt;
+      updatedAt = now();
+    };
+
+    users.add(caller, updatedUser);
   };
 
-  public shared ({ caller }) func addMoney(amount : Nat) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can add money");
+  // ADMIN CHECK FUNCTION (Required by user request)
+  public query ({ caller }) func isAdminCheck(token : Text) : async Bool {
+    let session = switch (sessions.get(token)) {
+      case (null) { return false };
+      case (?s) { s };
     };
 
-    let profile = switch (userProfiles.get(caller)) {
-      case (null) { Runtime.trap("User not found") };
-      case (?p) { p };
+    if (session.expiry < now()) {
+      return false;
     };
 
-    let newBalance = profile.walletBalance + amount;
-    updateWalletBalance(caller, newBalance);
-    recordTransaction(caller, "credit", Int.fromNat(amount), "Money added to wallet");
+    AccessControl.isAdmin(accessControlState, session.userId);
   };
 
-  public query ({ caller }) func getAllUsers() : async [Principal] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can perform this action");
-    };
-    userProfiles.keys().toArray();
-  };
-
-  // GAMES METHODS
+  // GAMES
   public shared ({ caller }) func addGame(game : Game) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can add games");
     };
 
     games.add(game.id, game);
+  };
+
+  public shared ({ caller }) func updateGame(game : Game) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can update games");
+    };
+
+    games.add(game.id, game);
+  };
+
+  public shared ({ caller }) func deleteGame(id : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can delete games");
+    };
+
+    games.remove(id);
   };
 
   public query ({ caller }) func getGames() : async [Game] {
@@ -233,37 +362,80 @@ actor {
     gameResults.add(result.gameId, result);
   };
 
-  public shared ({ caller }) func updateGameResult(gameId : Text, updatedResult : GameResult) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can update game results");
-    };
-
-    switch (gameResults.get(gameId)) {
-      case (null) { Runtime.trap("Result not found") };
-      case (?_) { gameResults.add(gameId, updatedResult) };
-    };
+  public query ({ caller }) func getGameResult(gameId : Text) : async ?GameResult {
+    gameResults.get(gameId);
   };
 
-  public query ({ caller }) func getGameResult(id : Text) : async ?GameResult {
-    gameResults.get(id);
+  // WALLET FUNCTIONS
+  public shared ({ caller }) func addMoney(token : Text, amount : Nat) : async () {
+    // Verify caller owns the session
+    let session = verifySessionOwnership(caller, token);
+
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can add money");
+    };
+
+    let user = switch (users.get(caller)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?u) { u };
+    };
+
+    let newBalance = user.walletBalance + amount;
+    let updatedUser : User = {
+      name = user.name;
+      phone = user.phone;
+      passwordHash = user.passwordHash;
+      walletBalance = newBalance;
+      createdAt = user.createdAt;
+      updatedAt = now();
+    };
+    users.add(caller, updatedUser);
+
+    recordTransaction(caller, "credit", Int.fromNat(amount), "Money added to wallet");
   };
 
-  // BETS METHODS
-  public shared ({ caller }) func placeBet(game : Text, betType : Text, betNumber : Text, amount : Nat) : async () {
+  public query ({ caller }) func getWalletBalance(token : Text) : async Nat {
+    // Verify caller owns the session
+    let session = switch (sessions.get(token)) {
+      case (null) { Runtime.trap("Session not found") };
+      case (?s) { s };
+    };
+
+    if (session.expiry < now()) {
+      Runtime.trap("Session expired");
+    };
+
+    if (session.userId != caller) {
+      Runtime.trap("Unauthorized: Session does not belong to caller");
+    };
+
+    let user = switch (users.get(caller)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?u) { u };
+    };
+
+    user.walletBalance;
+  };
+
+  // BETS FUNCTIONS
+  public shared ({ caller }) func placeBet(token : Text, gameId : Text, betType : Text, betNumber : Text, amount : Nat) : async () {
+    // Verify caller owns the session
+    let session = verifySessionOwnership(caller, token);
+
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can place bets");
+    };
+
+    let user = switch (users.get(caller)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?u) { u };
     };
 
     if (amount < 1_000_000) {
       Runtime.trap("Minimum bet amount is Rs.10");
     };
 
-    let profile = switch (userProfiles.get(caller)) {
-      case (null) { Runtime.trap("User not found") };
-      case (?p) { p };
-    };
-
-    if (profile.walletBalance < amount) {
+    if (user.walletBalance < amount) {
       Runtime.trap("Insufficient wallet balance");
     };
 
@@ -272,175 +444,138 @@ actor {
     let bet : Bet = {
       id = betIdCounter;
       userId = caller;
-      gameId = game;
+      gameId;
       betType;
       betNumber;
       amount;
       status = #pending;
+      createdAt = now();
+      updatedAt = now();
     };
 
     bets.add(betIdCounter, bet);
 
-    // Deduct from wallet
-    let newBalance = profile.walletBalance - amount;
-    updateWalletBalance(caller, newBalance);
-    recordTransaction(caller, "debit", -Int.fromNat(amount), "Bet placed on game " # game);
+    // Deduct from balance
+    let newBalance = user.walletBalance - amount;
+    let updatedUser : User = {
+      name = user.name;
+      phone = user.phone;
+      passwordHash = user.passwordHash;
+      walletBalance = newBalance;
+      createdAt = user.createdAt;
+      updatedAt = now();
+    };
+    users.add(caller, updatedUser);
+
+    recordTransaction(caller, "debit", -Int.fromNat(amount), "Bet placed on game " # gameId);
   };
 
-  public query ({ caller }) func getBets() : async [Bet] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view bets");
+  public query ({ caller }) func getBets(token : Text) : async [Bet] {
+    // Verify caller owns the session
+    let session = switch (sessions.get(token)) {
+      case (null) { Runtime.trap("Session not found") };
+      case (?s) { s };
+    };
+
+    if (session.expiry < now()) {
+      Runtime.trap("Session expired");
+    };
+
+    if (session.userId != caller) {
+      Runtime.trap("Unauthorized: Session does not belong to caller");
     };
 
     let allBets = bets.values().toArray();
-    
-    if (AccessControl.isAdmin(accessControlState, caller)) {
-      return allBets;
-    };
-
-    // Filter to user's own bets
     allBets.filter(func(bet : Bet) : Bool { bet.userId == caller });
   };
 
-  public query ({ caller }) func getBet(id : Nat) : async ?Bet {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view bets");
+  public query ({ caller }) func getAllBets() : async [Bet] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view all bets");
     };
 
-    switch (bets.get(id)) {
-      case (null) { null };
-      case (?bet) {
-        if (bet.userId != caller and not AccessControl.isAdmin(accessControlState, caller)) {
-          Runtime.trap("Unauthorized: Can only view your own bets");
-        };
-        ?bet;
-      };
-    };
+    bets.values().toArray();
   };
 
-  public shared ({ caller }) func settleBets(gameId : Text) : async () {
+  // ADMIN BET SETTLEMENT
+  public shared ({ caller }) func settleBet(betId : Nat, won : Bool) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can settle bets");
     };
 
-    let result = switch (gameResults.get(gameId)) {
-      case (null) { Runtime.trap("Game result not found") };
-      case (?r) { r };
+    let bet = switch (bets.get(betId)) {
+      case (null) { Runtime.trap("Bet not found") };
+      case (?b) { b };
     };
 
-    let allBets = bets.values().toArray();
-    let gameBets = allBets.filter(func(bet : Bet) : Bool { bet.gameId == gameId and bet.status == #pending });
+    if (bet.status != #pending) {
+      Runtime.trap("Bet already settled");
+    };
 
-    for (bet in gameBets.vals()) {
-      var isWinner = false;
-      var multiplier : Nat = 0;
+    let updatedBet : Bet = {
+      id = bet.id;
+      userId = bet.userId;
+      gameId = bet.gameId;
+      betType = bet.betType;
+      betNumber = bet.betNumber;
+      amount = bet.amount;
+      status = if (won) { #won } else { #lost };
+      createdAt = bet.createdAt;
+      updatedAt = now();
+    };
 
-      switch (bet.betType) {
-        case ("open") {
-          if (bet.betNumber == result.openNumber) {
-            isWinner := true;
-            multiplier := 9;
-          };
-        };
-        case ("close") {
-          if (bet.betNumber == result.closeNumber) {
-            isWinner := true;
-            multiplier := 9;
-          };
-        };
-        case ("jodi") {
-          if (bet.betNumber == result.jodiNumber) {
-            isWinner := true;
-            multiplier := 90;
-          };
-        };
-        case ("panel") {
-          if (bet.betNumber == result.panelOpen or bet.betNumber == result.panelClose) {
-            isWinner := true;
-            multiplier := 150;
-          };
-        };
-        case (_) {};
+    bets.add(betId, updatedBet);
+
+    if (won) {
+      let multiplier = switch (bet.betType) {
+        case ("open") { 9 };
+        case ("close") { 9 };
+        case ("jodi") { 90 };
+        case ("panel") { 150 };
+        case (_) { 0 };
       };
 
-      let updatedBet : Bet = {
-        id = bet.id;
-        userId = bet.userId;
-        gameId = bet.gameId;
-        betType = bet.betType;
-        betNumber = bet.betNumber;
-        amount = bet.amount;
-        status = if (isWinner) { #won } else { #lost };
+      let winAmount = bet.amount * multiplier;
+
+      let user = switch (users.get(bet.userId)) {
+        case (null) { Runtime.trap("User not found") };
+        case (?u) { u };
       };
 
-      bets.add(bet.id, updatedBet);
-
-      if (isWinner) {
-        let winnings = bet.amount * multiplier;
-        let userProfile = switch (userProfiles.get(bet.userId)) {
-          case (null) { Runtime.trap("User not found") };
-          case (?p) { p };
-        };
-
-        let newBalance = userProfile.walletBalance + winnings;
-        updateWalletBalance(bet.userId, newBalance);
-        recordTransaction(bet.userId, "credit", Int.fromNat(winnings), "Bet won on game " # gameId);
+      let newBalance = user.walletBalance + winAmount;
+      let updatedUser : User = {
+        name = user.name;
+        phone = user.phone;
+        passwordHash = user.passwordHash;
+        walletBalance = newBalance;
+        createdAt = user.createdAt;
+        updatedAt = now();
       };
+      users.add(bet.userId, updatedUser);
+
+      recordTransaction(bet.userId, "credit", Int.fromNat(winAmount), "Bet won - Game " # bet.gameId);
     };
   };
 
-  // TRANSACTIONS METHODS
-  public query ({ caller }) func getUserTransactions() : async [Transaction] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view transactions");
-    };
+  // WITHDRAWAL FUNCTIONS
+  public shared ({ caller }) func requestWithdrawal(token : Text, amount : Nat, method : { #upi : Text; #bank : (Text, Text, Text) }, details : Text) : async Nat {
+    // Verify caller owns the session
+    let session = verifySessionOwnership(caller, token);
 
-    let userTxs = switch (transactions.get(caller)) {
-      case (null) { [] };
-      case (?txs) { txs };
-    };
-    
-    let sorted = userTxs.sort();
-    sorted;
-  };
-
-  public query ({ caller }) func getAllTransactions() : async [Transaction] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can view all transactions");
-    };
-
-    let txArraysIter = transactions.values();
-    let allTxArrays = txArraysIter.toArray();
-    
-    if (allTxArrays.size() == 0) {
-      return [];
-    };
-    
-    var combined : [Transaction] = [];
-    for (txArray in allTxArrays.vals()) {
-      combined := combined.concat(txArray);
-    };
-    
-    let sorted = combined.sort();
-    sorted;
-  };
-
-  // WITHDRAWALS
-  public shared ({ caller }) func requestWithdrawal(amount : Nat, method : { #upi : Text; #bank : (Text, Text, Text) }, details : Text) : async Nat {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can request withdrawals");
     };
 
-    if (amount < 100) {
+    if (amount < 10_000_000) {
       Runtime.trap("Minimum withdrawal amount is Rs.100");
     };
 
-    let profile = switch (userProfiles.get(caller)) {
+    let user = switch (users.get(caller)) {
       case (null) { Runtime.trap("User not found") };
-      case (?p) { p };
+      case (?u) { u };
     };
 
-    if (profile.walletBalance < amount) {
+    if (user.walletBalance < amount) {
       Runtime.trap("Insufficient wallet balance");
     };
 
@@ -453,32 +588,53 @@ actor {
       status = #pending;
       method;
       details;
-      timestamp = Time.now();
+      timestamp = now();
     };
 
     withdrawals.add(withdrawalIdCounter, withdrawal);
 
-    // Deduct from wallet immediately
-    let newBalance = profile.walletBalance - amount;
-    updateWalletBalance(caller, newBalance);
-    recordTransaction(caller, "withdrawal", -Int.fromNat(amount), "Withdrawal request #" # withdrawalIdCounter.toText());
+    // Deduct from balance
+    let newBalance = user.walletBalance - amount;
+    let updatedUser : User = {
+      name = user.name;
+      phone = user.phone;
+      passwordHash = user.passwordHash;
+      walletBalance = newBalance;
+      createdAt = user.createdAt;
+      updatedAt = now();
+    };
+    users.add(caller, updatedUser);
+
+    recordTransaction(caller, "debit", -Int.fromNat(amount), "Withdrawal requested");
 
     withdrawalIdCounter;
   };
 
-  public query ({ caller }) func getWithdrawals() : async [Withdrawal] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view withdrawals");
+  public query ({ caller }) func getWithdrawals(token : Text) : async [Withdrawal] {
+    // Verify caller owns the session
+    let session = switch (sessions.get(token)) {
+      case (null) { Runtime.trap("Session not found") };
+      case (?s) { s };
+    };
+
+    if (session.expiry < now()) {
+      Runtime.trap("Session expired");
+    };
+
+    if (session.userId != caller) {
+      Runtime.trap("Unauthorized: Session does not belong to caller");
     };
 
     let allWithdrawals = withdrawals.values().toArray();
-    
-    if (AccessControl.isAdmin(accessControlState, caller)) {
-      return allWithdrawals;
+    allWithdrawals.filter(func(w : Withdrawal) : Bool { w.userId == caller });
+  };
+
+  public query ({ caller }) func getAllWithdrawals() : async [Withdrawal] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view all withdrawals");
     };
 
-    // Filter to user's own withdrawals
-    allWithdrawals.filter(func(w : Withdrawal) : Bool { w.userId == caller });
+    withdrawals.values().toArray();
   };
 
   public shared ({ caller }) func approveWithdrawal(withdrawalId : Nat) : async () {
@@ -506,7 +662,8 @@ actor {
     };
 
     withdrawals.add(withdrawalId, updatedWithdrawal);
-    recordTransaction(withdrawal.userId, "withdrawal", -Int.fromNat(withdrawal.amount), "Withdrawal approved #" # withdrawalId.toText());
+
+    recordTransaction(withdrawal.userId, "withdrawal", -Int.fromNat(withdrawal.amount), "Withdrawal approved");
   };
 
   public shared ({ caller }) func rejectWithdrawal(withdrawalId : Nat) : async () {
@@ -535,14 +692,71 @@ actor {
 
     withdrawals.add(withdrawalId, updatedWithdrawal);
 
-    // Refund to wallet
-    let userProfile = switch (userProfiles.get(withdrawal.userId)) {
+    // Refund to user
+    let user = switch (users.get(withdrawal.userId)) {
       case (null) { Runtime.trap("User not found") };
-      case (?p) { p };
+      case (?u) { u };
     };
 
-    let newBalance = userProfile.walletBalance + withdrawal.amount;
-    updateWalletBalance(withdrawal.userId, newBalance);
-    recordTransaction(withdrawal.userId, "credit", Int.fromNat(withdrawal.amount), "Withdrawal rejected, refunded #" # withdrawalId.toText());
+    let newBalance = user.walletBalance + withdrawal.amount;
+    let updatedUser : User = {
+      name = user.name;
+      phone = user.phone;
+      passwordHash = user.passwordHash;
+      walletBalance = newBalance;
+      createdAt = user.createdAt;
+      updatedAt = now();
+    };
+    users.add(withdrawal.userId, updatedUser);
+
+    recordTransaction(withdrawal.userId, "credit", Int.fromNat(withdrawal.amount), "Withdrawal rejected - refund");
+  };
+
+  // TRANSACTION RECORDING
+  func recordTransaction(userId : Principal, txType : Text, amount : Int, description : Text) {
+    let tx : Transaction = {
+      userId;
+      txType;
+      amount;
+      description;
+      timestamp = now();
+    };
+
+    let userTxs = switch (transactions.get(userId)) {
+      case (null) { [] };
+      case (?txs) { txs };
+    };
+
+    let updatedTxs = [tx].concat(userTxs);
+    transactions.add(userId, updatedTxs);
+  };
+
+  public query ({ caller }) func getTransactions(token : Text) : async [Transaction] {
+    // Verify caller owns the session
+    let session = switch (sessions.get(token)) {
+      case (null) { Runtime.trap("Session not found") };
+      case (?s) { s };
+    };
+
+    if (session.expiry < now()) {
+      Runtime.trap("Session expired");
+    };
+
+    if (session.userId != caller) {
+      Runtime.trap("Unauthorized: Session does not belong to caller");
+    };
+
+    switch (transactions.get(caller)) {
+      case (null) { [] };
+      case (?txs) { txs };
+    };
+  };
+
+  public query ({ caller }) func getAllTransactions() : async [(Principal, [Transaction])] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view all transactions");
+    };
+
+    transactions.toArray();
   };
 };

@@ -18,8 +18,10 @@ export interface Bet {
     id: bigint;
     status: BetStatus;
     userId: Principal;
+    createdAt: bigint;
     betType: string;
     gameId: string;
+    updatedAt: bigint;
     amount: bigint;
     betNumber: string;
 }
@@ -47,8 +49,9 @@ export interface GameResult {
     openNumber: string;
 }
 export interface UserProfile {
-    password: string;
     name: string;
+    createdAt: bigint;
+    updatedAt: bigint;
     phone: string;
     walletBalance: bigint;
 }
@@ -77,27 +80,30 @@ export enum WithdrawalStatus {
 export interface backendInterface {
     addGame(game: Game): Promise<void>;
     addGameResult(result: GameResult): Promise<void>;
-    addMoney(amount: bigint): Promise<void>;
+    addMoney(token: string, amount: bigint): Promise<void>;
     approveWithdrawal(withdrawalId: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    getAllTransactions(): Promise<Array<Transaction>>;
-    getAllUsers(): Promise<Array<Principal>>;
-    getBet(id: bigint): Promise<Bet | null>;
-    getBets(): Promise<Array<Bet>>;
+    deleteGame(id: string): Promise<void>;
+    getAllBets(): Promise<Array<Bet>>;
+    getAllTransactions(): Promise<Array<[Principal, Array<Transaction>]>>;
+    getAllWithdrawals(): Promise<Array<Withdrawal>>;
+    getBets(token: string): Promise<Array<Bet>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getGame(id: string): Promise<Game | null>;
-    getGameResult(id: string): Promise<GameResult | null>;
+    getGameResult(gameId: string): Promise<GameResult | null>;
     getGames(): Promise<Array<Game>>;
+    getTransactions(token: string): Promise<Array<Transaction>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
-    getUserTransactions(): Promise<Array<Transaction>>;
-    getWalletBalance(): Promise<bigint>;
-    getWithdrawals(): Promise<Array<Withdrawal>>;
+    getWalletBalance(token: string): Promise<bigint>;
+    getWithdrawals(token: string): Promise<Array<Withdrawal>>;
+    isAdminCheck(token: string): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
-    placeBet(game: string, betType: string, betNumber: string, amount: bigint): Promise<void>;
-    register(name: string, phone: string, password: string): Promise<void>;
+    login(phone: string, password: string): Promise<string>;
+    placeBet(token: string, gameId: string, betType: string, betNumber: string, amount: bigint): Promise<void>;
+    register(name: string, phone: string, password: string): Promise<string>;
     rejectWithdrawal(withdrawalId: bigint): Promise<void>;
-    requestWithdrawal(amount: bigint, method: {
+    requestWithdrawal(token: string, amount: bigint, method: {
         __kind__: "upi";
         upi: string;
     } | {
@@ -105,6 +111,6 @@ export interface backendInterface {
         bank: [string, string, string];
     }, details: string): Promise<bigint>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    settleBets(gameId: string): Promise<void>;
-    updateGameResult(gameId: string, updatedResult: GameResult): Promise<void>;
+    settleBet(betId: bigint, won: boolean): Promise<void>;
+    updateGame(game: Game): Promise<void>;
 }

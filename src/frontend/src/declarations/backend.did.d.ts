@@ -14,8 +14,10 @@ export interface Bet {
   'id' : bigint,
   'status' : BetStatus,
   'userId' : Principal,
+  'createdAt' : bigint,
   'betType' : string,
   'gameId' : string,
+  'updatedAt' : bigint,
   'amount' : bigint,
   'betNumber' : string,
 }
@@ -45,8 +47,9 @@ export interface Transaction {
   'amount' : bigint,
 }
 export interface UserProfile {
-  'password' : string,
   'name' : string,
+  'createdAt' : bigint,
+  'updatedAt' : bigint,
   'phone' : string,
   'walletBalance' : bigint,
 }
@@ -70,28 +73,35 @@ export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addGame' : ActorMethod<[Game], undefined>,
   'addGameResult' : ActorMethod<[GameResult], undefined>,
-  'addMoney' : ActorMethod<[bigint], undefined>,
+  'addMoney' : ActorMethod<[string, bigint], undefined>,
   'approveWithdrawal' : ActorMethod<[bigint], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
-  'getAllTransactions' : ActorMethod<[], Array<Transaction>>,
-  'getAllUsers' : ActorMethod<[], Array<Principal>>,
-  'getBet' : ActorMethod<[bigint], [] | [Bet]>,
-  'getBets' : ActorMethod<[], Array<Bet>>,
+  'deleteGame' : ActorMethod<[string], undefined>,
+  'getAllBets' : ActorMethod<[], Array<Bet>>,
+  'getAllTransactions' : ActorMethod<
+    [],
+    Array<[Principal, Array<Transaction>]>
+  >,
+  'getAllWithdrawals' : ActorMethod<[], Array<Withdrawal>>,
+  'getBets' : ActorMethod<[string], Array<Bet>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getGame' : ActorMethod<[string], [] | [Game]>,
   'getGameResult' : ActorMethod<[string], [] | [GameResult]>,
   'getGames' : ActorMethod<[], Array<Game>>,
+  'getTransactions' : ActorMethod<[string], Array<Transaction>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
-  'getUserTransactions' : ActorMethod<[], Array<Transaction>>,
-  'getWalletBalance' : ActorMethod<[], bigint>,
-  'getWithdrawals' : ActorMethod<[], Array<Withdrawal>>,
+  'getWalletBalance' : ActorMethod<[string], bigint>,
+  'getWithdrawals' : ActorMethod<[string], Array<Withdrawal>>,
+  'isAdminCheck' : ActorMethod<[string], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
-  'placeBet' : ActorMethod<[string, string, string, bigint], undefined>,
-  'register' : ActorMethod<[string, string, string], undefined>,
+  'login' : ActorMethod<[string, string], string>,
+  'placeBet' : ActorMethod<[string, string, string, string, bigint], undefined>,
+  'register' : ActorMethod<[string, string, string], string>,
   'rejectWithdrawal' : ActorMethod<[bigint], undefined>,
   'requestWithdrawal' : ActorMethod<
     [
+      string,
       bigint,
       { 'upi' : string } |
         { 'bank' : [string, string, string] },
@@ -100,8 +110,8 @@ export interface _SERVICE {
     bigint
   >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
-  'settleBets' : ActorMethod<[string], undefined>,
-  'updateGameResult' : ActorMethod<[string, GameResult], undefined>,
+  'settleBet' : ActorMethod<[bigint, boolean], undefined>,
+  'updateGame' : ActorMethod<[Game], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

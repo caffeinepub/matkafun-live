@@ -1,18 +1,8 @@
 import { Clock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMatkaTime } from "../hooks/useMatkaTime";
 
 export function MatkaClockWidget() {
-  const [time, setTime] = useState<Date>(new Date());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTime(new Date());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Subtract 7 hours
-  const adjustedTime = new Date(time.getTime() - 7 * 60 * 60 * 1000);
+  const adjustedTime = useMatkaTime();
 
   const hh = String(adjustedTime.getHours()).padStart(2, "0");
   const mm = String(adjustedTime.getMinutes()).padStart(2, "0");

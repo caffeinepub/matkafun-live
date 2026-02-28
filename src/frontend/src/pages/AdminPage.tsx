@@ -28,11 +28,10 @@ import {
   useAddGame,
   useAddGameResult,
   useApproveWithdrawal,
+  useGetAllWithdrawals,
   useGetGames,
-  useGetWithdrawals,
   useIsAdmin,
   useRejectWithdrawal,
-  useSettleBets,
   useUpdateGameResult,
 } from "../hooks/useQueries";
 
@@ -47,14 +46,14 @@ export function AdminPage() {
   const navigate = useNavigate();
   const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
   const { data: liveGames } = useGetGames();
-  const { data: withdrawals = [], isLoading: wdLoading } = useGetWithdrawals();
+  const { data: withdrawals = [], isLoading: wdLoading } =
+    useGetAllWithdrawals();
 
   const addGameMutation = useAddGame();
   const addResultMutation = useAddGameResult();
   const updateResultMutation = useUpdateGameResult();
   const approveMutation = useApproveWithdrawal();
   const rejectMutation = useRejectWithdrawal();
-  const settleMutation = useSettleBets();
 
   const games = liveGames && liveGames.length > 0 ? liveGames : SEED_GAMES;
 
@@ -418,41 +417,6 @@ export function AdminPage() {
                   "Post Result"
                 )}
               </Button>
-            </div>
-
-            {/* Settle bets */}
-            <div
-              className="p-4 rounded-xl space-y-3"
-              style={{
-                background: "oklch(0.13 0.005 260)",
-                border: "1px solid oklch(0.25 0.01 260)",
-              }}
-            >
-              <h3 className="font-display font-bold text-sm">Settle Bets</h3>
-              <div className="grid grid-cols-1 gap-2">
-                {games.slice(0, 8).map((g) => (
-                  <div
-                    key={g.id}
-                    className="flex items-center justify-between py-1.5 border-b border-border/20"
-                  >
-                    <span className="text-xs font-body text-foreground/70 truncate flex-1">
-                      {g.name}
-                    </span>
-                    <Button
-                      size="sm"
-                      className="h-7 px-3 text-xs ml-2 bg-emerald-600 hover:bg-emerald-500 text-white"
-                      onClick={() =>
-                        settleMutation.mutate(g.id, {
-                          onSuccess: () => toast.success(`Settled: ${g.name}`),
-                        })
-                      }
-                      disabled={settleMutation.isPending}
-                    >
-                      Settle
-                    </Button>
-                  </div>
-                ))}
-              </div>
             </div>
           </TabsContent>
 

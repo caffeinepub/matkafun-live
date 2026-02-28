@@ -6,6 +6,7 @@ import { BarChart2, ChevronRight, Flame, Grid } from "lucide-react";
 import { motion } from "motion/react";
 import type { Game, GameResult } from "../backend.d";
 import { SEED_RESULTS } from "../data/seedGames";
+import { useMatkaTime } from "../hooks/useMatkaTime";
 import { useGetGameResult } from "../hooks/useQueries";
 
 interface GameCardProps {
@@ -13,11 +14,10 @@ interface GameCardProps {
   index?: number;
 }
 
-function timestampToTime(ts: bigint): string {
+/** Convert bigint unix-seconds timestamp → total minutes since midnight */
+function tsToMinutes(ts: bigint): number {
   const d = new Date(Number(ts) * 1000);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
+  return d.getHours() * 60 + d.getMinutes();
 }
 
 function sessionColor(session: string) {
@@ -25,6 +25,68 @@ function sessionColor(session: string) {
     return "bg-amber-500/20 text-amber-300 border-amber-500/30";
   if (session === "Day") return "bg-sky-500/20 text-sky-300 border-sky-500/30";
   return "bg-violet-500/20 text-violet-300 border-violet-500/30";
+}
+
+type MarketStatus = "OPEN" | "RESULT_SOON" | "CLOSED";
+
+function getMarketStatus(
+  matkaTime: Date,
+  openTime: bigint,
+  closeTime: bigint,
+): MarketStatus {
+  const nowMin = matkaTime.getHours() * 60 + matkaTime.getMinutes();
+  const openMin = tsToMinutes(openTime);
+  const closeMin = tsToMinutes(closeTime);
+
+  // Handle overnight close (e.g. 21:30 open → 00:30 close)
+  // If closeMin < openMin, it wraps past midnight
+  const effectiveCloseMin = closeMin < openMin ? closeMin + 24 * 60 : closeMin;
+  // If nowMin is before openMin but very large, it might be the "next day" portion
+  const effectiveNowMin =
+    closeMin < openMin && nowMin < openMin ? nowMin + 24 * 60 : nowMin;
+
+  if (effectiveNowMin >= openMin && effectiveNowMin < effectiveCloseMin) {
+    return "OPEN";
+  }
+  if (
+    effectiveNowMin >= effectiveCloseMin &&
+    effectiveNowMin < effectiveCloseMin + 15
+  ) {
+    return "RESULT_SOON";
+  }
+  return "CLOSED";
+}
+
+function StatusBadge({ status }: { status: MarketStatus }) {
+  if (status === "OPEN") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-green-500/20 text-green-400 border-green-500/40">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0" />
+        OPEN
+      </span>
+    );
+  }
+  if (status === "RESULT_SOON") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+        RESULT SOON
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-gray-500/10 text-gray-500 border-gray-500/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-600 shrink-0" />
+      CLOSED
+    </span>
+  );
+}
+
+function timestampToTime(ts: bigint): string {
+  const d = new Date(Number(ts) * 1000);
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 function ResultDisplay({ result }: { result: GameResult | null | undefined }) {
@@ -71,8 +133,12 @@ function ResultDisplay({ result }: { result: GameResult | null | undefined }) {
 export function GameCard({ game, index = 0 }: GameCardProps) {
   const navigate = useNavigate();
   const { data: liveResult, isLoading } = useGetGameResult(game.id);
+  const matkaTime = useMatkaTime();
+
   // Fall back to seed data if backend returns nothing
   const result = liveResult ?? SEED_RESULTS[game.id] ?? null;
+
+  const status = getMarketStatus(matkaTime, game.openTime, game.closeTime);
 
   return (
     <motion.div
@@ -84,17 +150,28 @@ export function GameCard({ game, index = 0 }: GameCardProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
           <div className="flex items-center gap-2">
-            <Flame className="w-4 h-4 text-fire animate-flicker shrink-0" />
+            <Flame
+              className={`w-4 h-4 shrink-0 ${status === "OPEN" ? "text-green-400 animate-flicker" : "text-fire animate-flicker"}`}
+            />
             <span className="font-display font-bold text-sm uppercase tracking-wide text-foreground">
               {game.name}
             </span>
+            {status === "OPEN" && (
+              <span
+                className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"
+                title="Market is open"
+              />
+            )}
           </div>
-          <Badge
-            className={`text-[10px] px-2 py-0.5 border ${sessionColor(game.session)}`}
-            variant="outline"
-          >
-            {game.session}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <StatusBadge status={status} />
+            <Badge
+              className={`text-[10px] px-2 py-0.5 border ${sessionColor(game.session)}`}
+              variant="outline"
+            >
+              {game.session}
+            </Badge>
+          </div>
         </div>
 
         {/* Result numbers */}

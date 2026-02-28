@@ -18,9 +18,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SEED_GAMES, SEED_RESULTS } from "../data/seedGames";
 import {
+  getSessionToken,
   useGetGame,
   useGetGameResult,
-  useGetUserProfile,
   useGetWalletBalance,
   usePlaceBet,
 } from "../hooks/useQueries";
@@ -48,7 +48,6 @@ export function PlayPage() {
   const { data: liveGame, isLoading: gameLoading } = useGetGame(gameId);
   const { data: liveResult } = useGetGameResult(gameId);
   const { data: walletBalance = 0n } = useGetWalletBalance();
-  const { data: profile } = useGetUserProfile();
 
   const seedGame = SEED_GAMES.find((g) => g.id === gameId);
   const game = liveGame ?? seedGame ?? null;
@@ -69,7 +68,7 @@ export function PlayPage() {
   const balanceNum = Number(walletBalance);
 
   function validate(): string | null {
-    if (!profile) return "Please login to place a bet";
+    if (!getSessionToken()) return "Bet lagane ke liye pehle login karein";
     const amount = Number.parseInt(betAmount);
     if (!betNumber.trim()) return "Please enter a bet number";
     if (Number.isNaN(amount) || amount < 10) return "Minimum bet amount is ₹10";

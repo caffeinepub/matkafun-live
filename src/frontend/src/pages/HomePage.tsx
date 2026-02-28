@@ -3,18 +3,40 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Bell, Search } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
+import type { Game } from "../backend.d";
 import { GameCard } from "../components/GameCard";
 import { MatkaClockWidget } from "../components/MatkaClockWidget";
 import { SEED_GAMES } from "../data/seedGames";
+import { useMatkaTime } from "../hooks/useMatkaTime";
 import { useGetGames } from "../hooks/useQueries";
 
 const SESSION_TABS = ["All", "Morning", "Day", "Night"] as const;
 type SessionTab = (typeof SESSION_TABS)[number];
 
+/** Convert bigint unix-seconds timestamp → total minutes since midnight */
+function tsToMinutes(ts: bigint): number {
+  const d = new Date(Number(ts) * 1000);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+function isGameOpen(matkaTime: Date, game: Game): boolean {
+  const nowMin = matkaTime.getHours() * 60 + matkaTime.getMinutes();
+  const openMin = tsToMinutes(game.openTime);
+  const closeMin = tsToMinutes(game.closeTime);
+
+  // Handle overnight close (e.g. 21:30 open → 00:30 close)
+  const effectiveCloseMin = closeMin < openMin ? closeMin + 24 * 60 : closeMin;
+  const effectiveNowMin =
+    closeMin < openMin && nowMin < openMin ? nowMin + 24 * 60 : nowMin;
+
+  return effectiveNowMin >= openMin && effectiveNowMin < effectiveCloseMin;
+}
+
 export function HomePage() {
   const { data: liveGames, isLoading } = useGetGames();
   const [activeTab, setActiveTab] = useState<SessionTab>("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const matkaTime = useMatkaTime();
 
   const games = liveGames && liveGames.length > 0 ? liveGames : SEED_GAMES;
 
@@ -27,6 +49,15 @@ export function HomePage() {
       return matchSession && matchSearch;
     });
   }, [games, activeTab, searchQuery]);
+
+  // Build ticker text based on currently open games
+  const tickerText = useMemo(() => {
+    const openGames = games.filter((g) => isGameOpen(matkaTime, g));
+    if (openGames.length === 0) {
+      return "✦ All Markets Closed — Next session opening soon";
+    }
+    return openGames.map((g) => `✦ ${g.name}: OPEN`).join(" \u00a0\u00a0 ");
+  }, [games, matkaTime]);
 
   return (
     <div className="min-h-screen pb-24">
@@ -93,7 +124,7 @@ export function HomePage() {
         </div>
       </header>
 
-      {/* Live ticker banner */}
+      {/* Live ticker banner — scrolling marquee */}
       <div
         className="px-4 py-2 flex items-center gap-2 overflow-hidden"
         style={{
@@ -104,9 +135,16 @@ export function HomePage() {
         <span className="shrink-0 text-[10px] font-bold text-fire uppercase tracking-widest">
           ● LIVE
         </span>
-        <div className="text-xs text-amber-200/70 truncate">
-          ✦ Kalyan: 234-43-789 &nbsp;✦ Main Bazar: Open Soon &nbsp;✦ Milan Day:
-          378-47-890 &nbsp;✦ Rajdhani Night: Open Soon
+        <div className="overflow-hidden flex-1">
+          <div
+            className="text-xs text-amber-200/70 whitespace-nowrap"
+            style={{
+              display: "inline-block",
+              animation: "ticker-scroll 30s linear infinite",
+            }}
+          >
+            {tickerText}&nbsp;&nbsp;&nbsp;{tickerText}
+          </div>
         </div>
       </div>
 

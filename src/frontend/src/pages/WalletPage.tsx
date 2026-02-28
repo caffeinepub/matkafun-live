@@ -17,6 +17,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { Transaction } from "../backend.d";
 import {
+  getSessionToken,
   useAddMoney,
   useGetUserProfile,
   useGetUserTransactions,
@@ -91,8 +92,8 @@ export function WalletPage() {
   const balance = Number(walletBalance);
 
   async function handleAddMoney() {
-    if (!profile) {
-      toast.error("Please login first");
+    if (!getSessionToken()) {
+      toast.error("Pehle login karein");
       return;
     }
     const amt = Number.parseInt(addAmount);
@@ -111,8 +112,8 @@ export function WalletPage() {
   }
 
   async function handleWithdrawUpi() {
-    if (!profile) {
-      toast.error("Please login first");
+    if (!getSessionToken()) {
+      toast.error("Pehle login karein");
       return;
     }
     const amt = Number.parseInt(withdrawAmount);
@@ -143,8 +144,8 @@ export function WalletPage() {
   }
 
   async function handleWithdrawBank() {
-    if (!profile) {
-      toast.error("Please login first");
+    if (!getSessionToken()) {
+      toast.error("Pehle login karein");
       return;
     }
     const amt = Number.parseInt(withdrawAmount);
@@ -226,7 +227,11 @@ export function WalletPage() {
           </p>
         )}
         <p className="text-xs text-amber-200/40 mt-2 font-body">
-          {profile ? `@${profile.phone}` : "Login to view balance"}
+          {profile
+            ? `@${profile.phone}`
+            : getSessionToken()
+              ? "Loading..."
+              : "Pehle login karein"}
         </p>
       </motion.div>
 
