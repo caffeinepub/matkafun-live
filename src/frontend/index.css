@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────
+   FONT FACES — Self-hosted woff2 fonts
+─────────────────────────────────────────────── */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sora";
+  src: url("/assets/fonts/Sora[wght].woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+/* ───────────────────────────────────────────────
+   DESIGN TOKENS — MatkaFun Dark Theme
+   Palette: near-black bg, fiery orange accent,
+   amber/gold for numbers, emerald for wins, red for loss
+─────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Always dark — this is a betting app */
+    --background: 0.09 0 0;
+    --foreground: 0.96 0.01 95;
+
+    --card: 0.13 0.005 260;
+    --card-foreground: 0.96 0.01 95;
+
+    --popover: 0.15 0.005 260;
+    --popover-foreground: 0.96 0.01 95;
+
+    /* Orange/fire primary */
+    --primary: 0.68 0.22 45;
+    --primary-foreground: 0.09 0 0;
+
+    /* Muted dark surface */
+    --secondary: 0.18 0.005 260;
+    --secondary-foreground: 0.85 0.01 95;
+
+    --muted: 0.16 0.005 260;
+    --muted-foreground: 0.55 0.01 260;
+
+    /* Gold accent for numbers */
+    --accent: 0.82 0.18 80;
+    --accent-foreground: 0.09 0 0;
+
+    /* Destructive — red */
+    --destructive: 0.6 0.22 25;
+    --destructive-foreground: 0.96 0.01 95;
+
+    /* Success — emerald green */
+    --success: 0.68 0.2 160;
+    --success-foreground: 0.09 0 0;
+
+    /* Warning — amber */
+    --warning: 0.78 0.19 75;
+    --warning-foreground: 0.09 0 0;
+
+    --border: 0.25 0.01 260;
+    --input: 0.22 0.01 260;
+    --ring: 0.68 0.22 45;
+
+    /* Charts */
+    --chart-1: 0.68 0.22 45;
+    --chart-2: 0.68 0.2 160;
+    --chart-3: 0.82 0.18 80;
+    --chart-4: 0.6 0.22 25;
+    --chart-5: 0.6 0.18 230;
+
+    /* Sidebar */
+    --sidebar: 0.11 0.005 260;
+    --sidebar-foreground: 0.96 0.01 95;
+    --sidebar-primary: 0.68 0.22 45;
+    --sidebar-primary-foreground: 0.09 0 0;
+    --sidebar-accent: 0.18 0.005 260;
+    --sidebar-accent-foreground: 0.85 0.01 95;
+    --sidebar-border: 0.25 0.01 260;
+    --sidebar-ring: 0.68 0.22 45;
+
+    /* Custom matka tokens */
+    --matka-fire: 0.72 0.25 42;
+    --matka-gold: 0.85 0.19 82;
+    --matka-glow: 0.68 0.22 45;
+    --matka-surface: 0.14 0.006 260;
+    --matka-surface-alt: 0.17 0.006 260;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+    background-color: oklch(0.09 0 0);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+}
+
+/* ───────────────────────────────────────────────
+   UTILITIES
+─────────────────────────────────────────────── */
+@layer utilities {
+  .text-fire {
+    color: oklch(var(--matka-fire));
+  }
+  .text-gold {
+    color: oklch(var(--matka-gold));
+  }
+  .bg-fire {
+    background-color: oklch(var(--matka-fire));
+  }
+  .bg-gold {
+    background-color: oklch(var(--matka-gold));
+  }
+  .border-fire {
+    border-color: oklch(var(--matka-fire));
+  }
+  .glow-fire {
+    box-shadow: 0 0 20px oklch(var(--matka-fire) / 0.4), 0 0 40px oklch(var(--matka-fire) / 0.15);
+  }
+  .glow-gold {
+    box-shadow: 0 0 12px oklch(var(--matka-gold) / 0.5), 0 0 30px oklch(var(--matka-gold) / 0.2);
+  }
+  .glow-green {
+    box-shadow: 0 0 12px oklch(0.68 0.2 160 / 0.4);
+  }
+
+  .number-glow {
+    text-shadow: 0 0 10px oklch(var(--matka-gold) / 0.8), 0 0 20px oklch(var(--matka-gold) / 0.4);
+  }
+  .fire-text-glow {
+    text-shadow: 0 0 10px oklch(var(--matka-fire) / 0.7), 0 0 20px oklch(var(--matka-fire) / 0.3);
+  }
+
+  .matka-card {
+    background: linear-gradient(135deg, oklch(0.14 0.008 250) 0%, oklch(0.12 0.005 270) 100%);
+    border: 1px solid oklch(0.28 0.015 50 / 0.4);
+  }
+  .matka-card-hover {
+    transition: all 0.2s ease;
+  }
+  .matka-card-hover:hover {
+    border-color: oklch(var(--matka-fire) / 0.5);
+    box-shadow: 0 4px 24px oklch(var(--matka-fire) / 0.15);
+  }
+
+  .result-numbers {
+    font-family: "Cabinet Grotesk", monospace;
+    letter-spacing: 0.05em;
+  }
+  
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
