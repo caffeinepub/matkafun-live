@@ -11,7 +11,6 @@ import { AdminPage } from "./pages/AdminPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { HomePage } from "./pages/HomePage";
 import { PlayPage } from "./pages/PlayPage";
-import { ProfilePage } from "./pages/ProfilePage";
 import { WalletPage } from "./pages/WalletPage";
 
 // Root layout
@@ -81,12 +80,6 @@ const historyRoute = createRoute({
   component: HistoryPage,
 });
 
-const profileRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/profile",
-  component: ProfilePage,
-});
-
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin",
@@ -99,7 +92,6 @@ const routeTree = rootRoute.addChildren([
   playGameRoute,
   walletRoute,
   historyRoute,
-  profileRoute,
   adminRoute,
 ]);
 

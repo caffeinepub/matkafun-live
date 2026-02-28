@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,29 +8,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useNavigate } from "@tanstack/react-router";
-import {
-  CheckCircle,
-  Loader2,
-  Plus,
-  Shield,
-  Trophy,
-  XCircle,
-} from "lucide-react";
+import { Loader2, Plus, Shield, Trophy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { WithdrawalStatus } from "../backend.d";
 import { SEED_GAMES } from "../data/seedGames";
 import {
   useAddGame,
   useAddGameResult,
-  useApproveWithdrawal,
-  useGetAllWithdrawals,
   useGetGames,
-  useIsAdmin,
-  useRejectWithdrawal,
   useUpdateGameResult,
 } from "../hooks/useQueries";
 
@@ -43,17 +28,11 @@ function timeStrToTimestamp(t: string): bigint {
 }
 
 export function AdminPage() {
-  const navigate = useNavigate();
-  const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
   const { data: liveGames } = useGetGames();
-  const { data: withdrawals = [], isLoading: wdLoading } =
-    useGetAllWithdrawals();
 
   const addGameMutation = useAddGame();
   const addResultMutation = useAddGameResult();
   const updateResultMutation = useUpdateGameResult();
-  const approveMutation = useApproveWithdrawal();
-  const rejectMutation = useRejectWithdrawal();
 
   const games = liveGames && liveGames.length > 0 ? liveGames : SEED_GAMES;
 
@@ -129,38 +108,6 @@ export function AdminPage() {
     }
   }
 
-  if (adminLoading) {
-    return (
-      <div className="min-h-screen pb-24 px-4 pt-4 space-y-3">
-        {["s1", "s2", "s3"].map((k) => (
-          <Skeleton key={k} className="h-16 rounded-xl bg-muted/30" />
-        ))}
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
-          <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h2 className="font-display font-black text-xl text-foreground">
-            Admin Access Required
-          </h2>
-          <p className="text-muted-foreground font-body text-sm mt-2">
-            You don't have admin privileges.
-          </p>
-          <Button
-            className="mt-4 bg-fire hover:bg-fire/90 text-primary-foreground"
-            onClick={() => navigate({ to: "/" })}
-          >
-            Go Home
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen pb-24">
       {/* Header */}
@@ -181,7 +128,7 @@ export function AdminPage() {
       <div className="px-4 mt-4">
         <Tabs defaultValue="games">
           <TabsList
-            className="grid grid-cols-3 w-full"
+            className="grid grid-cols-2 w-full"
             style={{
               background: "oklch(0.14 0.005 260)",
               border: "1px solid oklch(0.25 0.01 260)",
@@ -197,13 +144,7 @@ export function AdminPage() {
               value="results"
               className="text-xs font-bold data-[state=active]:bg-fire data-[state=active]:text-primary-foreground"
             >
-              Results
-            </TabsTrigger>
-            <TabsTrigger
-              value="withdrawals"
-              className="text-xs font-bold data-[state=active]:bg-fire data-[state=active]:text-primary-foreground"
-            >
-              Withdrawals
+              Post Results
             </TabsTrigger>
           </TabsList>
 
@@ -418,101 +359,6 @@ export function AdminPage() {
                 )}
               </Button>
             </div>
-          </TabsContent>
-
-          {/* Withdrawals */}
-          <TabsContent value="withdrawals" className="mt-4">
-            {wdLoading ? (
-              <>
-                {["s1", "s2", "s3"].map((k) => (
-                  <Skeleton
-                    key={k}
-                    className="h-24 rounded-xl bg-muted/30 mb-3"
-                  />
-                ))}
-              </>
-            ) : withdrawals.length === 0 ? (
-              <div
-                className="rounded-xl p-8 text-center"
-                style={{
-                  background: "oklch(0.13 0.005 260)",
-                  border: "1px solid oklch(0.25 0.01 260)",
-                }}
-              >
-                <p className="text-muted-foreground font-body text-sm">
-                  No withdrawal requests
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {withdrawals.map((wd) => (
-                  <div
-                    key={Number(wd.id)}
-                    className="p-4 rounded-xl"
-                    style={{
-                      background: "oklch(0.13 0.005 260)",
-                      border: "1px solid oklch(0.25 0.01 260)",
-                    }}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="font-bold text-sm text-foreground font-body">
-                          ₹{Number(wd.amount).toLocaleString("en-IN")}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 font-body">
-                          {wd.method.__kind__ === "upi"
-                            ? `UPI: ${wd.method.upi}`
-                            : `Bank: ${wd.method.bank[0]}`}
-                        </p>
-                      </div>
-                      <Badge
-                        className={`text-xs border ${
-                          wd.status === WithdrawalStatus.approved
-                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                            : wd.status === WithdrawalStatus.rejected
-                              ? "bg-destructive/20 text-destructive border-destructive/30"
-                              : "bg-warning/20 text-warning border-warning/30"
-                        }`}
-                        variant="outline"
-                      >
-                        {wd.status}
-                      </Badge>
-                    </div>
-                    {wd.status === WithdrawalStatus.pending && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="flex-1 h-8 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
-                          onClick={() =>
-                            approveMutation.mutate(wd.id, {
-                              onSuccess: () =>
-                                toast.success("Withdrawal approved"),
-                            })
-                          }
-                          disabled={approveMutation.isPending}
-                        >
-                          <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 h-8 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs font-bold"
-                          onClick={() =>
-                            rejectMutation.mutate(wd.id, {
-                              onSuccess: () =>
-                                toast.success("Withdrawal rejected"),
-                            })
-                          }
-                          disabled={rejectMutation.isPending}
-                        >
-                          <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
           </TabsContent>
         </Tabs>
       </div>

@@ -17,13 +17,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SEED_GAMES, SEED_RESULTS } from "../data/seedGames";
-import {
-  getSessionToken,
-  useGetGame,
-  useGetGameResult,
-  useGetWalletBalance,
-  usePlaceBet,
-} from "../hooks/useQueries";
+import { useLocalWallet } from "../hooks/useLocalWallet";
+import { useGetGame, useGetGameResult } from "../hooks/useQueries";
 
 type BetType = "open" | "close" | "jodi" | "panel";
 
@@ -47,7 +42,7 @@ export function PlayPage() {
 
   const { data: liveGame, isLoading: gameLoading } = useGetGame(gameId);
   const { data: liveResult } = useGetGameResult(gameId);
-  const { data: walletBalance = 0n } = useGetWalletBalance();
+  const { balance, withdraw } = useLocalWallet();
 
   const seedGame = SEED_GAMES.find((g) => g.id === gameId);
   const game = liveGame ?? seedGame ?? null;
@@ -57,22 +52,18 @@ export function PlayPage() {
   const [betNumber, setBetNumber] = useState("");
   const [betAmount, setBetAmount] = useState("100");
   const [showConfirm, setShowConfirm] = useState(false);
-
-  const placeBetMutation = usePlaceBet();
+  const [isPlacing, setIsPlacing] = useState(false);
 
   const potentialWin = useMemo(() => {
     const amount = Number.parseInt(betAmount) || 0;
     return amount * BET_MULTIPLIERS[betType];
   }, [betAmount, betType]);
 
-  const balanceNum = Number(walletBalance);
-
   function validate(): string | null {
-    if (!getSessionToken()) return "Bet lagane ke liye pehle login karein";
     const amount = Number.parseInt(betAmount);
     if (!betNumber.trim()) return "Please enter a bet number";
     if (Number.isNaN(amount) || amount < 10) return "Minimum bet amount is ₹10";
-    if (amount > balanceNum) return "Insufficient wallet balance";
+    if (amount > balance) return "Insufficient wallet balance";
     if (betType === "open" || betType === "close") {
       if (!/^\d$/.test(betNumber))
         return "Enter a single digit (0-9) for open/close";
@@ -98,18 +89,21 @@ export function PlayPage() {
 
   async function handleConfirmBet() {
     setShowConfirm(false);
+    setIsPlacing(true);
     try {
-      await placeBetMutation.mutateAsync({
-        gameId,
-        betType,
-        betNumber,
-        amount: BigInt(Number.parseInt(betAmount)),
-      });
-      toast.success(`Bet placed! ₹${betAmount} on ${betNumber}`);
+      const amount = Number.parseInt(betAmount);
+      withdraw(
+        amount,
+        `Bet: ${betType.toUpperCase()} - ${betNumber}`,
+        `Bet on ${game?.name ?? gameId}`,
+      );
+      toast.success(`Bet placed! ₹${betAmount} on ${betNumber} (${betType})`);
       setBetNumber("");
       setBetAmount("100");
-    } catch {
-      toast.error("Failed to place bet. Please try again.");
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to place bet");
+    } finally {
+      setIsPlacing(false);
     }
   }
 
@@ -205,7 +199,7 @@ export function PlayPage() {
           Wallet Balance
         </span>
         <span className="font-display font-black text-gold text-lg">
-          ₹{balanceNum.toLocaleString("en-IN")}
+          ₹{balance.toLocaleString("en-IN")}
         </span>
       </div>
 
@@ -345,9 +339,9 @@ export function PlayPage() {
                     size="lg"
                     className="w-full h-14 text-base font-display font-black bg-fire hover:bg-fire/90 text-primary-foreground glow-fire"
                     onClick={handlePlayClick}
-                    disabled={placeBetMutation.isPending}
+                    disabled={isPlacing}
                   >
-                    {placeBetMutation.isPending ? (
+                    {isPlacing ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />{" "}
                         Placing Bet...
@@ -414,9 +408,9 @@ export function PlayPage() {
             <Button
               className="flex-1 bg-fire hover:bg-fire/90 text-primary-foreground font-bold"
               onClick={handleConfirmBet}
-              disabled={placeBetMutation.isPending}
+              disabled={isPlacing}
             >
-              {placeBetMutation.isPending ? (
+              {isPlacing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 "Confirm Bet"

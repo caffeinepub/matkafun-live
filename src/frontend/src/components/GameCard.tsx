@@ -135,10 +135,15 @@ export function GameCard({ game, index = 0 }: GameCardProps) {
   const { data: liveResult, isLoading } = useGetGameResult(game.id);
   const matkaTime = useMatkaTime();
 
-  // Fall back to seed data if backend returns nothing
-  const result = liveResult ?? SEED_RESULTS[game.id] ?? null;
-
   const status = getMarketStatus(matkaTime, game.openTime, game.closeTime);
+
+  // Show result based on clock status:
+  // - liveResult from admin takes priority
+  // - CLOSED games show seed results
+  // - OPEN/upcoming games show "***-**-***"
+  const result =
+    liveResult ??
+    (status === "CLOSED" ? (SEED_RESULTS[game.id] ?? null) : null);
 
   return (
     <motion.div

@@ -1,7 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bell, Search } from "lucide-react";
-import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import type { Game } from "../backend.d";
 import { GameCard } from "../components/GameCard";
@@ -147,30 +146,6 @@ export function HomePage() {
           </div>
         </div>
       </div>
-
-      {/* Welcome balance banner */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className="mx-4 mt-4 rounded-xl p-4 flex items-center justify-between"
-        style={{
-          background:
-            "linear-gradient(135deg, oklch(0.18 0.06 42) 0%, oklch(0.14 0.04 42) 100%)",
-          border: "1px solid oklch(0.35 0.1 42 / 0.5)",
-        }}
-      >
-        <div>
-          <p className="text-xs text-amber-300/70 font-body">Welcome Bonus</p>
-          <p className="text-2xl font-display font-black text-gold number-glow">
-            ₹1,000
-          </p>
-          <p className="text-[11px] text-amber-200/60 mt-0.5">
-            Auto-credited on registration
-          </p>
-        </div>
-        <div className="text-4xl">🎯</div>
-      </motion.div>
 
       {/* Games list */}
       <main className="px-4 mt-4 space-y-3">

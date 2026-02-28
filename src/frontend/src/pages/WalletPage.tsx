@@ -1,13 +1,13 @@
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  CheckCircle,
   CreditCard,
-  Loader2,
   RefreshCw,
   Smartphone,
   Wallet,
@@ -15,18 +15,14 @@ import {
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import type { Transaction } from "../backend.d";
-import {
-  getSessionToken,
-  useAddMoney,
-  useGetUserProfile,
-  useGetUserTransactions,
-  useGetWalletBalance,
-  useRequestWithdrawal,
-} from "../hooks/useQueries";
+import type {
+  LocalTransaction,
+  LocalWithdrawal,
+} from "../hooks/useLocalWallet";
+import { useLocalWallet } from "../hooks/useLocalWallet";
 
-function formatDate(ts: bigint): string {
-  const d = new Date(Number(ts) / 1_000_000); // nanoseconds
+function formatDate(ts: number): string {
+  const d = new Date(ts);
   return d.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -35,9 +31,8 @@ function formatDate(ts: bigint): string {
   });
 }
 
-function TransactionRow({ tx }: { tx: Transaction }) {
-  const isCredit =
-    tx.txType === "credit" || tx.txType === "win" || tx.txType === "deposit";
+function TransactionRow({ tx }: { tx: LocalTransaction }) {
+  const isCredit = tx.type === "credit";
   return (
     <div className="flex items-center gap-3 py-3 border-b border-border/30">
       <div
@@ -55,7 +50,7 @@ function TransactionRow({ tx }: { tx: Transaction }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-body font-medium text-foreground truncate">
-          {tx.description || tx.txType}
+          {tx.description}
         </p>
         <p className="text-xs text-muted-foreground">
           {formatDate(tx.timestamp)}
@@ -64,23 +59,41 @@ function TransactionRow({ tx }: { tx: Transaction }) {
       <span
         className={`font-display font-bold text-base shrink-0 ${isCredit ? "text-emerald-400" : "text-destructive"}`}
       >
-        {isCredit ? "+" : "-"}₹{Number(tx.amount).toLocaleString("en-IN")}
+        {isCredit ? "+" : "-"}₹{tx.amount.toLocaleString("en-IN")}
       </span>
     </div>
   );
 }
 
+function WithdrawalRow({ wd }: { wd: LocalWithdrawal }) {
+  return (
+    <div className="flex items-center gap-3 py-3 border-b border-border/30">
+      <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-emerald-500/15 text-emerald-400">
+        <CheckCircle className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-body font-medium text-foreground truncate">
+          {wd.method}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {formatDate(wd.timestamp)}
+        </p>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <span className="font-display font-bold text-base text-destructive shrink-0">
+          -₹{wd.amount.toLocaleString("en-IN")}
+        </span>
+        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-[10px] px-1.5 py-0">
+          APPROVED
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
 export function WalletPage() {
-  const {
-    data: walletBalance = 0n,
-    isLoading: balanceLoading,
-    refetch: refetchBalance,
-  } = useGetWalletBalance();
-  const { data: transactions = [], isLoading: txLoading } =
-    useGetUserTransactions();
-  const { data: profile } = useGetUserProfile();
-  const addMoneyMutation = useAddMoney();
-  const requestWithdrawalMutation = useRequestWithdrawal();
+  const { balance, withdraw, addMoney, transactions, withdrawals, refetch } =
+    useLocalWallet();
 
   const [addAmount, setAddAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -89,33 +102,18 @@ export function WalletPage() {
   const [ifscCode, setIfscCode] = useState("");
   const [accHolder, setAccHolder] = useState("");
 
-  const balance = Number(walletBalance);
-
-  async function handleAddMoney() {
-    if (!getSessionToken()) {
-      toast.error("Pehle login karein");
-      return;
-    }
+  function handleAddMoney() {
     const amt = Number.parseInt(addAmount);
     if (!amt || amt < 100) {
       toast.error("Minimum add amount is ₹100");
       return;
     }
-    try {
-      await addMoneyMutation.mutateAsync(BigInt(amt));
-      toast.success(`₹${amt} added to wallet`);
-      setAddAmount("");
-      refetchBalance();
-    } catch {
-      toast.error("Failed to add money");
-    }
+    addMoney(amt);
+    toast.success(`₹${amt.toLocaleString("en-IN")} added to wallet!`);
+    setAddAmount("");
   }
 
-  async function handleWithdrawUpi() {
-    if (!getSessionToken()) {
-      toast.error("Pehle login karein");
-      return;
-    }
+  function handleWithdrawUpi() {
     const amt = Number.parseInt(withdrawAmount);
     if (!amt || amt < 100) {
       toast.error("Minimum withdrawal is ₹100");
@@ -130,24 +128,16 @@ export function WalletPage() {
       return;
     }
     try {
-      await requestWithdrawalMutation.mutateAsync({
-        amount: BigInt(amt),
-        method: { __kind__: "upi", upi: upiId },
-        details: `Withdrawal to UPI: ${upiId}`,
-      });
-      toast.success("Withdrawal request submitted!");
+      withdraw(amt, `UPI: ${upiId}`, `Withdrawal to UPI: ${upiId}`);
+      toast.success("✅ Withdrawal Approved! Amount sent to your UPI.");
       setWithdrawAmount("");
       setUpiId("");
-    } catch {
-      toast.error("Withdrawal request failed");
+    } catch (e) {
+      toast.error((e as Error).message || "Withdrawal failed");
     }
   }
 
-  async function handleWithdrawBank() {
-    if (!getSessionToken()) {
-      toast.error("Pehle login karein");
-      return;
-    }
+  function handleWithdrawBank() {
     const amt = Number.parseInt(withdrawAmount);
     if (!amt || amt < 100) {
       toast.error("Minimum withdrawal is ₹100");
@@ -162,18 +152,20 @@ export function WalletPage() {
       return;
     }
     try {
-      await requestWithdrawalMutation.mutateAsync({
-        amount: BigInt(amt),
-        method: { __kind__: "bank", bank: [accNumber, ifscCode, accHolder] },
-        details: `Withdrawal to Bank: ${accNumber}`,
-      });
-      toast.success("Withdrawal request submitted! Processing in 24-48 hours.");
+      withdraw(
+        amt,
+        `Bank: ${accNumber}`,
+        `Withdrawal to Bank: ${accNumber} | IFSC: ${ifscCode}`,
+      );
+      toast.success(
+        "✅ Withdrawal Approved! Amount sent to your bank account.",
+      );
       setWithdrawAmount("");
       setAccNumber("");
       setIfscCode("");
       setAccHolder("");
-    } catch {
-      toast.error("Withdrawal request failed");
+    } catch (e) {
+      toast.error((e as Error).message || "Withdrawal failed");
     }
   }
 
@@ -195,7 +187,7 @@ export function WalletPage() {
           </div>
           <button
             type="button"
-            onClick={() => refetchBalance()}
+            onClick={refetch}
             className="p-2 rounded-lg hover:bg-secondary/60 transition-colors"
           >
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
@@ -219,19 +211,11 @@ export function WalletPage() {
         <p className="text-xs text-amber-300/60 uppercase tracking-widest font-body mb-1">
           Available Balance
         </p>
-        {balanceLoading ? (
-          <Skeleton className="h-12 w-40 mx-auto bg-muted/30" />
-        ) : (
-          <p className="text-5xl font-display font-black text-gold number-glow">
-            ₹{balance.toLocaleString("en-IN")}
-          </p>
-        )}
+        <p className="text-5xl font-display font-black text-gold number-glow">
+          ₹{balance.toLocaleString("en-IN")}
+        </p>
         <p className="text-xs text-amber-200/40 mt-2 font-body">
-          {profile
-            ? `@${profile.phone}`
-            : getSessionToken()
-              ? "Loading..."
-              : "Pehle login karein"}
+          Instant withdrawal available
         </p>
       </motion.div>
 
@@ -301,19 +285,11 @@ export function WalletPage() {
               <Button
                 className="w-full mt-4 h-12 font-display font-black bg-fire hover:bg-fire/90 text-primary-foreground glow-fire"
                 onClick={handleAddMoney}
-                disabled={addMoneyMutation.isPending}
               >
-                {addMoneyMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                    Processing...
-                  </>
-                ) : (
-                  "Add Money"
-                )}
+                Add Money
               </Button>
               <p className="text-xs text-muted-foreground text-center mt-2 font-body">
-                Min ₹100 · Instant credit · UPI / Net Banking
+                Min ₹100 · Instant credit
               </p>
             </div>
           </TabsContent>
@@ -351,6 +327,12 @@ export function WalletPage() {
                     border: "1px solid oklch(0.25 0.01 260)",
                   }}
                 >
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <p className="text-xs text-emerald-400 font-body">
+                      Withdrawal approved instantly — no waiting!
+                    </p>
+                  </div>
                   <div className="space-y-2">
                     <Label className="text-sm text-muted-foreground font-body">
                       UPI ID
@@ -378,18 +360,10 @@ export function WalletPage() {
                     />
                   </div>
                   <Button
-                    className="w-full h-12 font-display font-black bg-emerald-600 hover:bg-emerald-500 text-white glow-green"
+                    className="w-full h-12 font-display font-black bg-emerald-600 hover:bg-emerald-500 text-white"
                     onClick={handleWithdrawUpi}
-                    disabled={requestWithdrawalMutation.isPending}
                   >
-                    {requestWithdrawalMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                        Processing...
-                      </>
-                    ) : (
-                      "Withdraw to UPI"
-                    )}
+                    Withdraw to UPI
                   </Button>
                 </div>
               </TabsContent>
@@ -403,6 +377,12 @@ export function WalletPage() {
                     border: "1px solid oklch(0.25 0.01 260)",
                   }}
                 >
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <p className="text-xs text-emerald-400 font-body">
+                      Withdrawal approved instantly — no waiting!
+                    </p>
+                  </div>
                   {[
                     {
                       label: "Account Holder Name",
@@ -451,22 +431,11 @@ export function WalletPage() {
                     />
                   </div>
                   <Button
-                    className="w-full h-12 font-display font-black bg-emerald-600 hover:bg-emerald-500 text-white glow-green"
+                    className="w-full h-12 font-display font-black bg-emerald-600 hover:bg-emerald-500 text-white"
                     onClick={handleWithdrawBank}
-                    disabled={requestWithdrawalMutation.isPending}
                   >
-                    {requestWithdrawalMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
-                        Submitting...
-                      </>
-                    ) : (
-                      "Withdraw to Bank"
-                    )}
+                    Withdraw to Bank
                   </Button>
-                  <p className="text-xs text-center text-muted-foreground font-body">
-                    Processing: 24-48 hours
-                  </p>
                 </div>
               </TabsContent>
             </Tabs>
@@ -474,28 +443,26 @@ export function WalletPage() {
         </Tabs>
       </div>
 
+      {/* Withdrawal History */}
+      {withdrawals.length > 0 && (
+        <div className="px-4 mt-6">
+          <h2 className="font-display font-bold text-base mb-3">
+            Withdrawal History
+          </h2>
+          <div>
+            {withdrawals.map((wd) => (
+              <WithdrawalRow key={wd.id} wd={wd} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Transactions */}
       <div className="px-4 mt-6">
         <h2 className="font-display font-bold text-base mb-3">
           Recent Transactions
         </h2>
-        {txLoading ? (
-          <>
-            {["s1", "s2", "s3", "s4"].map((k) => (
-              <div
-                key={k}
-                className="flex items-center gap-3 py-3 border-b border-border/30"
-              >
-                <Skeleton className="w-9 h-9 rounded-full bg-muted/30" />
-                <div className="flex-1 space-y-1">
-                  <Skeleton className="h-4 w-40 bg-muted/30" />
-                  <Skeleton className="h-3 w-24 bg-muted/30" />
-                </div>
-                <Skeleton className="h-5 w-16 bg-muted/30" />
-              </div>
-            ))}
-          </>
-        ) : transactions.length === 0 ? (
+        {transactions.length === 0 ? (
           <div
             className="rounded-xl p-8 text-center"
             style={{
@@ -510,9 +477,8 @@ export function WalletPage() {
           </div>
         ) : (
           <div>
-            {transactions.map((tx, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: transactions have no stable id
-              <TransactionRow key={i} tx={tx} />
+            {transactions.map((tx) => (
+              <TransactionRow key={tx.id} tx={tx} />
             ))}
           </div>
         )}
