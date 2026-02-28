@@ -7,11 +7,13 @@ import Text "mo:core/Text";
 import Iter "mo:core/Iter";
 import Order "mo:core/Order";
 import Runtime "mo:core/Runtime";
+import Migration "migration";
 import Principal "mo:core/Principal";
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
-import Migration "migration"; // Explicit migration function
+ // Explicit migration function
+
 
 (with migration = Migration.run)
 actor {
@@ -23,6 +25,7 @@ actor {
   public type UserProfile = {
     name : Text;
     phone : Text;
+    googleEmail : Text;
     walletBalance : Nat;
     createdAt : Int;
     updatedAt : Int;
@@ -31,6 +34,7 @@ actor {
   type User = {
     name : Text;
     phone : Text;
+    googleEmail : Text;
     passwordHash : Blob;
     walletBalance : Nat;
     createdAt : Int;
@@ -167,6 +171,7 @@ actor {
     let user : User = {
       name;
       phone;
+      googleEmail = "";
       passwordHash = hashPassword(password);
       walletBalance = 100_000_000;
       createdAt = now();
@@ -246,6 +251,68 @@ actor {
     user;
   };
 
+  // GOOGLE AUTH
+  public shared ({ caller }) func loginWithGoogle(googleEmail : Text, displayName : Text, wantsAdmin : Bool, adminCode : Text) : async Text {
+    let existingUsers = users.toArray().filter(
+      func((id, user)) : Bool {
+        Text.equal(user.googleEmail, googleEmail);
+      }
+    );
+
+    if (existingUsers.size() > 0) {
+      // User exists, return session token
+      let userId = existingUsers[0].0;
+      return createSession(userId);
+    };
+
+    // User does not exist, create new user
+    let newUser : User = {
+      name = displayName;
+      phone = "N/A";
+      googleEmail;
+      passwordHash = "".encodeUtf8();
+      walletBalance = 100_000_000;
+      createdAt = now();
+      updatedAt = now();
+    };
+
+    users.add(caller, newUser);
+
+    // Assign role
+    if (wantsAdmin and adminCode == "MATKA2024") {
+      AccessControl.assignRole(accessControlState, caller, caller, #admin);
+    } else {
+      AccessControl.assignRole(accessControlState, caller, caller, #user);
+    };
+
+    recordTransaction(caller, "credit", 100_000_000, "Google signup bonus");
+
+    createSession(caller);
+  };
+
+  public query ({ caller }) func getUserEmailFromToken(token : Text) : async Text {
+    // Verify caller owns the session
+    let session = switch (sessions.get(token)) {
+      case (null) { Runtime.trap("Session not found") };
+      case (?s) { s };
+    };
+
+    if (session.expiry < now()) {
+      Runtime.trap("Session expired");
+    };
+
+    if (session.userId != caller) {
+      Runtime.trap("Unauthorized: Session does not belong to caller");
+    };
+
+    let user = switch (users.get(session.userId)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?u) { u };
+    };
+
+    user.googleEmail;
+  };
+
   // USER PROFILE FUNCTIONS (Required by instructions)
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
@@ -258,6 +325,7 @@ actor {
         ?{
           name = user.name;
           phone = user.phone;
+          googleEmail = user.googleEmail;
           walletBalance = user.walletBalance;
           createdAt = user.createdAt;
           updatedAt = user.updatedAt;
@@ -277,6 +345,7 @@ actor {
         ?{
           name = u.name;
           phone = u.phone;
+          googleEmail = u.googleEmail;
           walletBalance = u.walletBalance;
           createdAt = u.createdAt;
           updatedAt = u.updatedAt;
@@ -298,6 +367,7 @@ actor {
     let updatedUser : User = {
       name = profile.name;
       phone = existingUser.phone;
+      googleEmail = existingUser.googleEmail;
       passwordHash = existingUser.passwordHash;
       walletBalance = existingUser.walletBalance;
       createdAt = existingUser.createdAt;
@@ -384,6 +454,7 @@ actor {
     let updatedUser : User = {
       name = user.name;
       phone = user.phone;
+      googleEmail = user.googleEmail;
       passwordHash = user.passwordHash;
       walletBalance = newBalance;
       createdAt = user.createdAt;
@@ -460,6 +531,7 @@ actor {
     let updatedUser : User = {
       name = user.name;
       phone = user.phone;
+      googleEmail = user.googleEmail;
       passwordHash = user.passwordHash;
       walletBalance = newBalance;
       createdAt = user.createdAt;
@@ -546,6 +618,7 @@ actor {
       let updatedUser : User = {
         name = user.name;
         phone = user.phone;
+        googleEmail = user.googleEmail;
         passwordHash = user.passwordHash;
         walletBalance = newBalance;
         createdAt = user.createdAt;
@@ -598,6 +671,7 @@ actor {
     let updatedUser : User = {
       name = user.name;
       phone = user.phone;
+      googleEmail = user.googleEmail;
       passwordHash = user.passwordHash;
       walletBalance = newBalance;
       createdAt = user.createdAt;
@@ -702,6 +776,7 @@ actor {
     let updatedUser : User = {
       name = user.name;
       phone = user.phone;
+      googleEmail = user.googleEmail;
       passwordHash = user.passwordHash;
       walletBalance = newBalance;
       createdAt = user.createdAt;

@@ -1,33 +1,44 @@
 # MatkaFun Live
 
 ## Current State
-- Registration requires Internet Identity (DFINITY's secure auth) which is complex for users
-- Users get "Account registration failed" error repeatedly
-- Login flow shows Internet Identity popup which confuses users
-- Backend register() function tied to Principal (Internet Identity)
+- Phone number + password based login/registration system
+- Session tokens stored in localStorage
+- Admin check via `isAdminCheck(token)` backend call
+- ProfilePage shows login/register tabs
 
 ## Requested Changes (Diff)
 
 ### Add
-- Simple phone+password based login system (no Internet Identity required)
-- Guest/anonymous principal for all users - use phone number as unique key
-- Backend: phoneLogin() function that creates or returns a user by phone+password
-- Frontend: Simple login form with just phone + password fields
-- Auto-login after registration (no separate login step)
+- Google-style login flow: user enters their Google email address to sign in (simulated OAuth - no real Google API needed)
+- On first login with a new Google email, auto-register and show registration completion form (name input)
+- Role selection dialog shown at login time: user picks "Admin" or "User" role
+- Admin role requires a secret admin code (hardcoded "MATKA2024") to verify
+- Backend: `loginWithGoogle(email, name)` function that creates/retrieves user by Google email
+- Backend: `isAdminByEmail(email)` stored per-user flag
 
 ### Modify
-- Backend: register() to work with anonymous caller, keyed by phone number instead of Principal
-- Backend: Authentication based on phone+password instead of Internet Identity
-- Frontend ProfilePage: Replace Internet Identity login button with simple phone+password form
-- Remove all Internet Identity references from the login/registration UI
+- ProfilePage: replace phone/password tabs with Google login button + email input flow
+- Login flow: after Google email entered -> show role selection dialog -> if admin, ask for admin code -> complete login
+- Backend user model: add `googleEmail` field, make phone optional
+- Registration: auto-generate phone placeholder from email hash if no phone
 
 ### Remove
-- Internet Identity login requirement
-- useInternetIdentity hook dependency from registration flow
-- "DFINITY Internet Identity se secured" messaging
+- Phone number based login (useLogin with phone/password mutation)
+- useRegister with phone/password
+- Password fields from login/registration UI
 
 ## Implementation Plan
-1. Update backend main.mo: Add phoneLogin(phone, password) -> session token or profile, register by phone key
-2. Update frontend hooks: Replace II-based auth with phone-based auth using localStorage session
-3. Update ProfilePage: Show simple phone+password form, auto-register new users or login existing ones
-4. Remove Internet Identity shield icons and messaging from auth screens
+1. Update backend main.mo to add Google email auth:
+   - New `loginWithGoogle(email: Text, name: Text, wantsAdmin: Bool, adminCode: Text)` function
+   - Returns session token on success
+   - Auto-creates user on first login with Rs.1000 bonus
+   - Admin code check: if wantsAdmin=true, verify adminCode=="MATKA2024", then grant admin role
+2. Update useQueries.ts:
+   - Add `useGoogleLogin` mutation that calls `loginWithGoogle`
+   - Keep session token pattern the same
+3. Rewrite ProfilePage login section:
+   - Step 1: "Google se Login" button -> show email input
+   - Step 2: Role selection dialog (Admin / User cards)
+   - Step 3: If Admin selected, show admin code input
+   - Step 4: Complete login, show success
+4. Keep logged-in profile view unchanged

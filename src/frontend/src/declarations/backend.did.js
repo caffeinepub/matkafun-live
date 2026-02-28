@@ -72,6 +72,7 @@ export const UserProfile = IDL.Record({
   'name' : IDL.Text,
   'createdAt' : IDL.Int,
   'updatedAt' : IDL.Int,
+  'googleEmail' : IDL.Text,
   'phone' : IDL.Text,
   'walletBalance' : IDL.Nat,
 });
@@ -98,6 +99,7 @@ export const idlService = IDL.Service({
   'getGameResult' : IDL.Func([IDL.Text], [IDL.Opt(GameResult)], ['query']),
   'getGames' : IDL.Func([], [IDL.Vec(Game)], ['query']),
   'getTransactions' : IDL.Func([IDL.Text], [IDL.Vec(Transaction)], ['query']),
+  'getUserEmailFromToken' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
@@ -108,6 +110,11 @@ export const idlService = IDL.Service({
   'isAdminCheck' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'login' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
+  'loginWithGoogle' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Bool, IDL.Text],
+      [IDL.Text],
+      [],
+    ),
   'placeBet' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
       [],
@@ -200,6 +207,7 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Text,
     'createdAt' : IDL.Int,
     'updatedAt' : IDL.Int,
+    'googleEmail' : IDL.Text,
     'phone' : IDL.Text,
     'walletBalance' : IDL.Nat,
   });
@@ -226,6 +234,7 @@ export const idlFactory = ({ IDL }) => {
     'getGameResult' : IDL.Func([IDL.Text], [IDL.Opt(GameResult)], ['query']),
     'getGames' : IDL.Func([], [IDL.Vec(Game)], ['query']),
     'getTransactions' : IDL.Func([IDL.Text], [IDL.Vec(Transaction)], ['query']),
+    'getUserEmailFromToken' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
@@ -236,6 +245,11 @@ export const idlFactory = ({ IDL }) => {
     'isAdminCheck' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'login' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
+    'loginWithGoogle' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Bool, IDL.Text],
+        [IDL.Text],
+        [],
+      ),
     'placeBet' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
         [],

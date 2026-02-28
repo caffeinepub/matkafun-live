@@ -134,6 +134,7 @@ export interface UserProfile {
     name: string;
     createdAt: bigint;
     updatedAt: bigint;
+    googleEmail: string;
     phone: string;
     walletBalance: bigint;
 }
@@ -177,12 +178,14 @@ export interface backendInterface {
     getGameResult(gameId: string): Promise<GameResult | null>;
     getGames(): Promise<Array<Game>>;
     getTransactions(token: string): Promise<Array<Transaction>>;
+    getUserEmailFromToken(token: string): Promise<string>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWalletBalance(token: string): Promise<bigint>;
     getWithdrawals(token: string): Promise<Array<Withdrawal>>;
     isAdminCheck(token: string): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     login(phone: string, password: string): Promise<string>;
+    loginWithGoogle(googleEmail: string, displayName: string, wantsAdmin: boolean, adminCode: string): Promise<string>;
     placeBet(token: string, gameId: string, betType: string, betNumber: string, amount: bigint): Promise<void>;
     register(name: string, phone: string, password: string): Promise<string>;
     rejectWithdrawal(withdrawalId: bigint): Promise<void>;
@@ -438,6 +441,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getUserEmailFromToken(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserEmailFromToken(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserEmailFromToken(arg0);
+            return result;
+        }
+    }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
@@ -519,6 +536,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.login(arg0, arg1);
+            return result;
+        }
+    }
+    async loginWithGoogle(arg0: string, arg1: string, arg2: boolean, arg3: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.loginWithGoogle(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.loginWithGoogle(arg0, arg1, arg2, arg3);
             return result;
         }
     }

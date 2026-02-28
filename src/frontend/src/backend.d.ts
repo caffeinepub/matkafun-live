@@ -52,6 +52,7 @@ export interface UserProfile {
     name: string;
     createdAt: bigint;
     updatedAt: bigint;
+    googleEmail: string;
     phone: string;
     walletBalance: bigint;
 }
@@ -94,12 +95,14 @@ export interface backendInterface {
     getGameResult(gameId: string): Promise<GameResult | null>;
     getGames(): Promise<Array<Game>>;
     getTransactions(token: string): Promise<Array<Transaction>>;
+    getUserEmailFromToken(token: string): Promise<string>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWalletBalance(token: string): Promise<bigint>;
     getWithdrawals(token: string): Promise<Array<Withdrawal>>;
     isAdminCheck(token: string): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     login(phone: string, password: string): Promise<string>;
+    loginWithGoogle(googleEmail: string, displayName: string, wantsAdmin: boolean, adminCode: string): Promise<string>;
     placeBet(token: string, gameId: string, betType: string, betNumber: string, amount: bigint): Promise<void>;
     register(name: string, phone: string, password: string): Promise<string>;
     rejectWithdrawal(withdrawalId: bigint): Promise<void>;

@@ -470,3 +470,40 @@ export function useSettleBets() {
     },
   });
 }
+
+export function useGoogleLogin() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      email,
+      displayName,
+      wantsAdmin,
+      adminCode,
+    }: {
+      email: string;
+      displayName: string;
+      wantsAdmin: boolean;
+      adminCode: string;
+    }) => {
+      if (!actor) throw new Error("Not connected");
+      const token = await actor.loginWithGoogle(
+        email,
+        displayName,
+        wantsAdmin,
+        adminCode,
+      );
+      setSessionToken(token);
+      setStoredProfile({ name: displayName, phone: "" });
+      return token;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["userProfile"] });
+      qc.invalidateQueries({ queryKey: ["walletBalance"] });
+      qc.invalidateQueries({ queryKey: ["isAdmin"] });
+      qc.invalidateQueries({ queryKey: ["bets"] });
+      qc.invalidateQueries({ queryKey: ["userTransactions"] });
+      qc.invalidateQueries({ queryKey: ["withdrawals"] });
+    },
+  });
+}
