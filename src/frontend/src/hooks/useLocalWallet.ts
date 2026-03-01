@@ -5,10 +5,17 @@ const WITHDRAWALS_KEY = "matka_withdrawals";
 const TRANSACTIONS_KEY = "matka_transactions";
 const INITIAL_BALANCE = 10000;
 
+export const INR_TO_USD = 84;
+
+export function inrToUsd(inr: number): number {
+  return Math.round((inr / INR_TO_USD) * 100) / 100;
+}
+
 export interface LocalWithdrawal {
   id: number;
   amount: number;
-  method: string; // "UPI: xxx" or "Bank: xxx"
+  usdAmount?: number;
+  method: string; // "UPI: xxx", "Bank: xxx", or "Stripe: xxx"
   details: string;
   status: "approved";
   timestamp: number;
@@ -88,6 +95,7 @@ export function useLocalWallet() {
       const newWd: LocalWithdrawal = {
         id: Date.now(),
         amount,
+        usdAmount: inrToUsd(amount),
         method,
         details,
         status: "approved",

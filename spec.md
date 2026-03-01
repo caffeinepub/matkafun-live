@@ -1,42 +1,34 @@
 # MatkaFun Live
 
 ## Current State
-- Full login/registration system (phone+password, Google email, single-box "admin"/"user" login)
-- Session tokens, user profiles stored in backend
-- Wallet balance per user (fetched via session token)
-- Withdrawal requires admin approval (approve/reject in admin panel)
-- Game results shown from backend + seed fallback
-- Clock: 7 hours behind real time (useMatkaTime hook)
-- Market status (OPEN/RESULT SOON/CLOSED) computed from matka time vs game open/close times
+- Wallet is fully localStorage-based (no backend payment integration)
+- Balance shown only in INR (₹)
+- Withdrawal supports UPI ID and Bank Account (auto-approved locally)
+- No Stripe integration exists
+- No USD conversion display
 
 ## Requested Changes (Diff)
 
 ### Add
-- Fixed local wallet of ₹10,000 (stored in localStorage, no backend needed)
-- Auto-approve withdrawal: when user submits withdrawal, immediately mark as "approved" and deduct from local wallet
-- Clock-based results: for games whose close time has passed (per matka time), show pre-seeded realistic results; games currently open or upcoming show "***-**-***"
+- USD equivalent display alongside INR balance on wallet page (using fixed rate 1 USD = 84 INR)
+- Stripe-based deposit (Add Money) flow using Stripe Checkout — user enters amount in INR, sees USD equivalent, pays via Stripe card
+- After Stripe payment success, wallet balance updated
+- Stripe withdrawal tab added — user enters card/bank details via Stripe Connect payout flow UI (amount shown in both INR and USD)
+- Exchange rate note shown to users (e.g. "1 USD = ₹84")
 
 ### Modify
-- Remove all login/session/profile/auth logic from frontend
-- WalletPage: show fixed ₹10,000 wallet from localStorage (deducted on withdrawal), no session checks
-- HomePage: remove "Welcome Bonus" banner, remove login prompts
-- BottomNav: remove Profile tab and Admin tab (no login system)
-- GameCard: results shown based on matka time — if game is CLOSED, show seed result; if OPEN or upcoming, show pending "***-**-***"
-- AdminPage: keep for result management but remove session-based admin check; accessible directly via /admin URL
+- WalletPage: balance card shows both ₹ and $ amounts
+- Add Money tab: shows USD equivalent of entered INR amount live
+- Withdraw tab: add "Stripe Card" as a third withdrawal option alongside UPI/Bank
+- All amount displays in withdrawal history also show USD equivalent
 
 ### Remove
-- ProfilePage.tsx (entire login/profile system)
-- All session token logic from useQueries.ts
-- Login-required guards on wallet, history, bets
-- Admin approval/reject buttons for withdrawals (auto-approved now)
-- "Pehle login karein" messages everywhere
+- Nothing removed — existing UPI/Bank withdrawal still works alongside Stripe
 
 ## Implementation Plan
-1. Remove ProfilePage, simplify BottomNav (no Profile/Admin tabs)
-2. Create useLocalWallet hook: localStorage wallet starting at ₹10,000, with deposit/withdraw functions
-3. Update WalletPage: use useLocalWallet, withdrawal immediately deducts and shows "Approved" status in local history
-4. Update HomePage: remove welcome bonus banner, remove login prompts
-5. Update GameCard: results show based on matka clock — CLOSED games show seed result, OPEN/upcoming show "***"
-6. Update seedGames.ts: ensure all 27 games have results in SEED_RESULTS
-7. Remove session checks from all queries, simplify useQueries.ts
-8. Keep AdminPage accessible at /admin (no login gate)
+1. Add USD conversion utility function (INR_TO_USD rate = 84)
+2. Update WalletPage balance card to show USD equivalent below INR balance
+3. In Add Money section: show live USD equivalent as user types INR amount
+4. Add Stripe withdrawal tab in withdraw section with card number, expiry, CVV fields and USD+INR display
+5. Show USD equivalent in withdrawal history rows
+6. Wire Stripe component's deposit/payout UI into the wallet flow
